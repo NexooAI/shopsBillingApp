@@ -1,0 +1,18 @@
+This folder should contain the following image assets:
+
+1. icon.png - App icon (1024x1024)
+2. splash.png - Splash screen image (1284x2778)
+3. adaptive-icon.png - Android adaptive icon foreground (1024x1024)
+4. favicon.png - Web favicon (48x48)
+
+You can use any image editing tool or online services like:
+- Canva
+- Figma
+- Adobe Express
+- Icon.kitchen (for generating all icon sizes)
+
+Recommended design:
+- Use the app's primary color (#1a1a2e) as background
+- Use the accent color (#e8b923) for the storefront icon
+- Keep the design simple and recognizable at small sizes
+
