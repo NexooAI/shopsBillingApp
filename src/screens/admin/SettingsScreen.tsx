@@ -180,7 +180,7 @@ export default function SettingsScreen() {
             rightElement={
               <Switch
                 value={true}
-                onValueChange={() => {}}
+                onValueChange={() => { }}
                 trackColor={{ false: colors.gray[300], true: colors.accent + '50' }}
                 thumbColor={colors.accent}
               />
@@ -207,16 +207,16 @@ export default function SettingsScreen() {
           <Text style={styles.sectionHeader}>Data</Text>
           <View style={styles.sectionContent}>
             <SettingItem
+              icon="sync"
+              title="Server Sync"
+              subtitle="Backup data to server"
+              onPress={() => navigation.navigate('ServerSync' as never)}
+            />
+            <SettingItem
               icon="cloud-download"
               title="Export Data"
               subtitle="Download all data as Excel"
               onPress={() => Alert.alert('Export', 'Export functionality')}
-            />
-            <SettingItem
-              icon="cloud-upload"
-              title="Backup Data"
-              subtitle="Backup to cloud"
-              onPress={() => Alert.alert('Backup', 'Backup functionality')}
             />
             <SettingItem
               icon="trash"

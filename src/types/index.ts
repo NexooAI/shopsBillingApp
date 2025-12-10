@@ -30,6 +30,7 @@ export interface Product {
   unit: string;
   stock?: number;
   barcode?: string;
+  imageUri?: string;
   createdAt: Date;
 }
 

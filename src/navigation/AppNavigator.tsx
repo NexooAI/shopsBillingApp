@@ -24,6 +24,7 @@ import AddProductScreen from '../screens/admin/AddProductScreen';
 import AddCategoryScreen from '../screens/admin/AddCategoryScreen';
 import BulkUploadScreen from '../screens/admin/BulkUploadScreen';
 import SettingsScreen from '../screens/admin/SettingsScreen';
+import ServerSyncScreen from '../screens/admin/ServerSyncScreen';
 
 // Bill Screen
 import BillPreviewScreen from '../screens/billing/BillPreviewScreen';
@@ -40,6 +41,7 @@ export type RootStackParamList = {
   AddCategory: { category?: any };
   BulkUpload: undefined;
   Settings: undefined;
+  ServerSync: undefined;
   BillPreview: { bill: any };
 };
 
@@ -97,24 +99,24 @@ function MainTabs() {
         },
       })}
     >
-      <Tab.Screen 
-        name="Dashboard" 
+      <Tab.Screen
+        name="Dashboard"
         component={DashboardScreen}
         options={{ title: 'Home' }}
       />
-      <Tab.Screen 
-        name="Products" 
+      <Tab.Screen
+        name="Products"
         component={ProductsScreen}
         options={{ title: 'Products' }}
       />
-      <Tab.Screen 
-        name="Billing" 
+      <Tab.Screen
+        name="Billing"
         component={BillingScreen}
         options={{ title: 'Billing' }}
       />
       {isAdmin && (
-        <Tab.Screen 
-          name="Sales" 
+        <Tab.Screen
+          name="Sales"
           component={SalesSummaryScreen}
           options={{ title: 'Sales' }}
         />
@@ -193,6 +195,11 @@ export default function AppNavigator() {
               name="Settings"
               component={SettingsScreen}
               options={{ title: 'Settings' }}
+            />
+            <Stack.Screen
+              name="ServerSync"
+              component={ServerSyncScreen}
+              options={{ title: 'Server Sync' }}
             />
             <Stack.Screen
               name="BillPreview"

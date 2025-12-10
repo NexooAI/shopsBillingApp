@@ -7,11 +7,12 @@ import {
   TouchableOpacity,
   TextInput,
   Dimensions,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, fontSize, fontWeight, shadows } from '../../theme';
 import { useApp } from '../../context/AppContext';
-import { Product, Category } from '../../types';
+import { Product, Category, CartItem } from '../../types';
 
 const { width } = Dimensions.get('window');
 const CATEGORY_WIDTH = 80;
@@ -21,18 +22,78 @@ type ViewMode = 'grid' | 'list';
 interface ProductCardProps {
   product: Product;
   viewMode: ViewMode;
+  cartItem?: CartItem;
   onAddToCart: () => void;
+  onIncrement: () => void;
+  onDecrement: () => void;
 }
 
-function ProductCard({ product, viewMode, onAddToCart }: ProductCardProps) {
+function ProductCard({ product, viewMode, cartItem, onAddToCart, onIncrement, onDecrement }: ProductCardProps) {
   const gstLabel = product.isGstInclusive ? 'GST Incl.' : `+${product.gstPercentage}% GST`;
-  
+  const quantity = cartItem?.quantity || 0;
+
+  // Render product image or placeholder
+  const renderImage = (size: 'large' | 'small') => {
+    const isLarge = size === 'large';
+    const imageSize = isLarge ? 32 : 24;
+
+    if (product.imageUri) {
+      return (
+        <Image
+          source={{ uri: product.imageUri }}
+          style={isLarge ? styles.productImageGrid : styles.productImageListImg}
+          resizeMode="cover"
+        />
+      );
+    }
+    return <Ionicons name="cube-outline" size={imageSize} color={colors.gray[400]} />;
+  };
+
+  // Render quantity controls or add button
+  const renderQuantityControls = (isGrid: boolean) => {
+    if (quantity > 0) {
+      return (
+        <View style={isGrid ? styles.quantityControlsGrid : styles.quantityControlsList}>
+          <TouchableOpacity
+            style={[styles.quantityButton, styles.decrementButton]}
+            onPress={onDecrement}
+          >
+            <Ionicons name={quantity === 1 ? "trash-outline" : "remove"} size={16} color={colors.white} />
+          </TouchableOpacity>
+          <View style={styles.quantityBadge}>
+            <Text style={styles.quantityText}>{quantity}</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.quantityButton, styles.incrementButton]}
+            onPress={onIncrement}
+          >
+            <Ionicons name="add" size={16} color={colors.white} />
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <TouchableOpacity
+        style={isGrid ? styles.addButtonGrid : styles.addButtonList}
+        onPress={onAddToCart}
+      >
+        <Ionicons name="add" size={isGrid ? 20 : 18} color={colors.white} />
+      </TouchableOpacity>
+    );
+  };
+
   if (viewMode === 'grid') {
     return (
-      <TouchableOpacity style={styles.productCardGrid} onPress={onAddToCart}>
+      <TouchableOpacity style={styles.productCardGrid} onPress={quantity === 0 ? onAddToCart : undefined} activeOpacity={quantity > 0 ? 1 : 0.7}>
         <View style={styles.productImagePlaceholder}>
-          <Ionicons name="cube-outline" size={32} color={colors.gray[400]} />
+          {renderImage('large')}
         </View>
+        {quantity > 0 && (
+          <View style={styles.cartBadgeGrid}>
+            <Text style={styles.cartBadgeText}>{quantity}</Text>
+          </View>
+        )}
         <View style={styles.productInfoGrid}>
           <Text style={styles.productNameGrid} numberOfLines={1}>{product.nameEn}</Text>
           <Text style={styles.productNameTamil} numberOfLines={1}>{product.nameTa}</Text>
@@ -42,18 +103,21 @@ function ProductCard({ product, viewMode, onAddToCart }: ProductCardProps) {
           </View>
           <Text style={styles.gstLabel}>{gstLabel}</Text>
         </View>
-        <TouchableOpacity style={styles.addButtonGrid} onPress={onAddToCart}>
-          <Ionicons name="add" size={20} color={colors.white} />
-        </TouchableOpacity>
+        {renderQuantityControls(true)}
       </TouchableOpacity>
     );
   }
 
   return (
-    <TouchableOpacity style={styles.productCardList} onPress={onAddToCart}>
+    <TouchableOpacity style={styles.productCardList} onPress={quantity === 0 ? onAddToCart : undefined} activeOpacity={quantity > 0 ? 1 : 0.7}>
       <View style={styles.productImageSmall}>
-        <Ionicons name="cube-outline" size={24} color={colors.gray[400]} />
+        {renderImage('small')}
       </View>
+      {quantity > 0 && (
+        <View style={styles.cartBadgeList}>
+          <Text style={styles.cartBadgeTextSmall}>{quantity}</Text>
+        </View>
+      )}
       <View style={styles.productInfoList}>
         <Text style={styles.productNameList}>{product.nameEn}</Text>
         <Text style={styles.productNameTamilSmall}>{product.nameTa}</Text>
@@ -63,9 +127,7 @@ function ProductCard({ product, viewMode, onAddToCart }: ProductCardProps) {
         <Text style={styles.productPriceList}>₹{product.price}</Text>
         <Text style={styles.productUnitSmall}>/{product.unit}</Text>
       </View>
-      <TouchableOpacity style={styles.addButtonList} onPress={onAddToCart}>
-        <Ionicons name="add" size={18} color={colors.white} />
-      </TouchableOpacity>
+      {renderQuantityControls(false)}
     </TouchableOpacity>
   );
 }
@@ -114,7 +176,7 @@ function CategoryTab({ category, isSelected, onSelect }: CategoryTabProps) {
 }
 
 export default function ProductsScreen() {
-  const { state, addToCart } = useApp();
+  const { state, addToCart, updateCartItem, removeFromCart } = useApp();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(
     state.categories[0]?.id || null
   );
@@ -123,11 +185,11 @@ export default function ProductsScreen() {
 
   const filteredProducts = useMemo(() => {
     let products = state.products;
-    
+
     if (selectedCategory) {
       products = products.filter((p) => p.categoryId === selectedCategory);
     }
-    
+
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       products = products.filter(
@@ -136,19 +198,47 @@ export default function ProductsScreen() {
           p.nameTa.includes(searchQuery)
       );
     }
-    
+
     return products;
   }, [state.products, selectedCategory, searchQuery]);
 
+  // Get cart item for a product
+  const getCartItem = (productId: string) => {
+    return state.cart.find(item => item.product.id === productId);
+  };
+
   const handleAddToCart = (product: Product) => {
     addToCart(product, 1);
+  };
+
+  const handleIncrement = (product: Product) => {
+    const cartItem = getCartItem(product.id);
+    if (cartItem) {
+      updateCartItem(product.id, cartItem.quantity + 1);
+    } else {
+      addToCart(product, 1);
+    }
+  };
+
+  const handleDecrement = (product: Product) => {
+    const cartItem = getCartItem(product.id);
+    if (cartItem) {
+      if (cartItem.quantity === 1) {
+        removeFromCart(product.id);
+      } else {
+        updateCartItem(product.id, cartItem.quantity - 1);
+      }
+    }
   };
 
   const renderProduct = ({ item }: { item: Product }) => (
     <ProductCard
       product={item}
       viewMode={viewMode}
+      cartItem={getCartItem(item.id)}
       onAddToCart={() => handleAddToCart(item)}
+      onIncrement={() => handleIncrement(item)}
+      onDecrement={() => handleDecrement(item)}
     />
   );
 
@@ -413,6 +503,89 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     color: colors.gray[500],
     marginTop: 2,
+  },
+  productImageGrid: {
+    width: '100%',
+    height: '100%',
+    borderRadius: borderRadius.md,
+  },
+  productImageListImg: {
+    width: '100%',
+    height: '100%',
+    borderRadius: borderRadius.md,
+  },
+  cartBadgeGrid: {
+    position: 'absolute',
+    top: spacing.xs,
+    right: spacing.xs,
+    backgroundColor: colors.accent,
+    borderRadius: borderRadius.full,
+    width: 22,
+    height: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  cartBadgeText: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+    color: colors.white,
+  },
+  cartBadgeList: {
+    position: 'absolute',
+    top: spacing.xs,
+    left: spacing.xs,
+    backgroundColor: colors.accent,
+    borderRadius: borderRadius.full,
+    width: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  cartBadgeTextSmall: {
+    fontSize: 10,
+    fontWeight: fontWeight.bold,
+    color: colors.white,
+  },
+  quantityControlsGrid: {
+    position: 'absolute',
+    bottom: spacing.sm,
+    right: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.full,
+    ...shadows.small,
+  },
+  quantityControlsList: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.gray[100],
+    borderRadius: borderRadius.full,
+  },
+  quantityButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  decrementButton: {
+    backgroundColor: colors.error,
+  },
+  incrementButton: {
+    backgroundColor: colors.secondary,
+  },
+  quantityBadge: {
+    paddingHorizontal: spacing.sm,
+    minWidth: 28,
+    alignItems: 'center',
+  },
+  quantityText: {
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
+    color: colors.text.primary,
   },
   addButtonGrid: {
     position: 'absolute',

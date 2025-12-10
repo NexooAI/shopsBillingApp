@@ -42,7 +42,7 @@ export default function LoginScreen() {
       const success = login(username, password);
       setIsLoading(false);
       if (!success) {
-        Alert.alert('Error', 'Invalid credentials. Try admin/admin123');
+        Alert.alert('Error', 'Invalid credentials.\n\nTry:\n• Admin: admin/admin123\n• Staff: user/user123');
       }
     }, 500);
   };
@@ -61,7 +61,7 @@ export default function LoginScreen() {
       const success = loginWithPhone(phone, pin);
       setIsLoading(false);
       if (!success) {
-        Alert.alert('Error', 'Invalid phone or PIN. Try 9999999999/1234');
+        Alert.alert('Error', 'Invalid phone or PIN.\n\nTry:\n• Admin: 9999999999/1234\n• Staff: 8888888888/4321');
       }
     }, 500);
   };
@@ -231,9 +231,27 @@ export default function LoginScreen() {
 
         {/* Demo Credentials */}
         <View style={styles.demoContainer}>
-          <Text style={styles.demoTitle}>Demo Credentials:</Text>
-          <Text style={styles.demoText}>Username: admin | Password: admin123</Text>
-          <Text style={styles.demoText}>Phone: 9999999999 | PIN: 1234</Text>
+          <Text style={styles.demoTitle}>Demo Credentials</Text>
+          
+          {/* Admin Credentials */}
+          <View style={styles.credentialCard}>
+            <View style={styles.credentialHeader}>
+              <Ionicons name="shield-checkmark" size={16} color={colors.accent} />
+              <Text style={styles.credentialRole}>Admin Login</Text>
+            </View>
+            <Text style={styles.demoText}>Username: admin | Password: admin123</Text>
+            <Text style={styles.demoText}>Phone: 9999999999 | PIN: 1234</Text>
+          </View>
+          
+          {/* User/Staff Credentials */}
+          <View style={styles.credentialCard}>
+            <View style={styles.credentialHeader}>
+              <Ionicons name="person" size={16} color={colors.secondary} />
+              <Text style={styles.credentialRoleUser}>Staff Login</Text>
+            </View>
+            <Text style={styles.demoText}>Username: user | Password: user123</Text>
+            <Text style={styles.demoText}>Phone: 8888888888 | PIN: 4321</Text>
+          </View>
         </View>
 
         {/* Footer */}
@@ -361,13 +379,36 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   demoTitle: {
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
+    color: colors.white,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  credentialCard: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.md,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  credentialHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  credentialRole: {
     fontSize: fontSize.sm,
     fontWeight: fontWeight.bold,
     color: colors.accent,
-    marginBottom: spacing.xs,
+  },
+  credentialRoleUser: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+    color: colors.secondary,
   },
   demoText: {
-    fontSize: fontSize.sm,
+    fontSize: fontSize.xs,
     color: colors.gray[400],
     marginBottom: 2,
   },

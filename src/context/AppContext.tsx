@@ -12,6 +12,15 @@ const MASTER_USER: User = {
   createdAt: new Date(),
 };
 
+const DEMO_STAFF_USER: User = {
+  id: 'staff1',
+  username: 'user',
+  phone: '8888888888',
+  role: 'user',
+  pin: '4321',
+  createdAt: new Date(),
+};
+
 const DEMO_CATEGORIES: Category[] = [
   { id: '1', nameEn: 'Grocery', nameTa: 'மளிகை', icon: 'basket', color: '#e74c3c', createdAt: new Date() },
   { id: '2', nameEn: 'Vegetables', nameTa: 'காய்கறிகள்', icon: 'leaf', color: '#27ae60', createdAt: new Date() },
@@ -41,7 +50,7 @@ const initialState: AppState = {
   products: DEMO_PRODUCTS,
   cart: [],
   bills: [],
-  users: [MASTER_USER],
+  users: [MASTER_USER, DEMO_STAFF_USER],
 };
 
 type Action =
@@ -216,12 +225,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = (username: string, password: string): boolean => {
-    // Master login: admin/admin123
+    // Admin login: admin/admin123
     if (username === 'admin' && password === 'admin123') {
       dispatch({ type: 'LOGIN', payload: MASTER_USER });
       return true;
     }
-    // Check other users (password is same as username for demo)
+    // Staff/User login: user/user123
+    if (username === 'user' && password === 'user123') {
+      dispatch({ type: 'LOGIN', payload: DEMO_STAFF_USER });
+      return true;
+    }
+    // Check other users (password is same as username + 123 for demo)
     const user = state.users.find(
       (u) => u.username === username && password === `${username}123`
     );

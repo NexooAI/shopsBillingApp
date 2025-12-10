@@ -9,7 +9,14 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1a1a2e"
+      "backgroundColor": "#1a1a2e",
+      "dark": {
+        "backgroundColor": "#1a1a2e"
+      },
+      "light": {
+        "backgroundColor": "#ffffff"
+      },
+      "hideExponentText": true
     },
     "assetBundlePatterns": [
       "**/*"
@@ -36,4 +43,3 @@
     }
   }
 }
-

@@ -5,4 +5,5 @@ export { default as AddProductScreen } from './AddProductScreen';
 export { default as AddCategoryScreen } from './AddCategoryScreen';
 export { default as BulkUploadScreen } from './BulkUploadScreen';
 export { default as SettingsScreen } from './SettingsScreen';
+export { default as ServerSyncScreen } from './ServerSyncScreen';
 
