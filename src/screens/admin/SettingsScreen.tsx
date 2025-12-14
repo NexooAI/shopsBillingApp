@@ -110,8 +110,8 @@ export default function SettingsScreen() {
           <SettingItem
             icon="print"
             title="Printer Settings"
-            subtitle="Bluetooth printer setup"
-            onPress={() => Alert.alert('Printer', 'Configure Bluetooth printer')}
+            subtitle="Wired & Bluetooth printer setup"
+            onPress={() => navigation.navigate('PrinterSettings' as never)}
           />
         </View>
       </View>

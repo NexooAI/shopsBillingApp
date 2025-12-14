@@ -34,6 +34,7 @@ export default function AddProductScreen() {
   const route = useRoute<AddProductRouteProp>();
   const { state, addProduct } = useApp();
 
+  const [productCode, setProductCode] = useState('');
   const [nameEn, setNameEn] = useState('');
   const [nameTa, setNameTa] = useState('');
   const [categoryId, setCategoryId] = useState(route.params?.categoryId || '');
@@ -45,6 +46,22 @@ export default function AddProductScreen() {
   const [barcode, setBarcode] = useState('');
   const [imageUri, setImageUri] = useState<string | undefined>(undefined);
   const [isLoadingImage, setIsLoadingImage] = useState(false);
+
+  // Generate next product code
+  const getNextProductCode = () => {
+    const existingCodes = state.products
+      .map(p => parseInt(p.productCode || '0', 10))
+      .filter(code => !isNaN(code));
+    const maxCode = existingCodes.length > 0 ? Math.max(...existingCodes) : 0;
+    return (maxCode + 1).toString();
+  };
+
+  // Auto-generate code if empty
+  React.useEffect(() => {
+    if (!productCode) {
+      setProductCode(getNextProductCode());
+    }
+  }, []);
 
   // Ensure product images directory exists
   const ensureImageDirectory = async () => {
@@ -156,6 +173,16 @@ export default function AddProductScreen() {
   };
 
   const handleSubmit = async () => {
+    if (!productCode.trim()) {
+      Alert.alert('Error', 'Please enter a product code');
+      return;
+    }
+    // Check for duplicate product code
+    const existingProduct = state.products.find(p => p.productCode === productCode.trim());
+    if (existingProduct) {
+      Alert.alert('Error', `Product code "${productCode}" already exists for "${existingProduct.nameEn}"`);
+      return;
+    }
     if (!nameEn.trim()) {
       Alert.alert('Error', 'Please enter product name in English');
       return;
@@ -169,22 +196,28 @@ export default function AddProductScreen() {
       return;
     }
 
-    addProduct({
-      nameEn: nameEn.trim(),
-      nameTa: nameTa.trim() || nameEn.trim(),
-      categoryId,
-      price: parseFloat(price),
-      unit,
-      gstPercentage,
-      isGstInclusive,
-      stock: stock ? parseInt(stock) : undefined,
-      barcode: barcode.trim() || undefined,
-      imageUri: imageUri,
-    });
+    try {
+      await addProduct({
+        productCode: productCode.trim(),
+        nameEn: nameEn.trim(),
+        nameTa: nameTa.trim() || nameEn.trim(),
+        categoryId,
+        price: parseFloat(price),
+        unit,
+        gstPercentage,
+        isGstInclusive,
+        stock: stock ? parseInt(stock) : undefined,
+        barcode: barcode.trim() || undefined,
+        imageUri: imageUri,
+      });
 
-    Alert.alert('Success', 'Product added successfully', [
-      { text: 'OK', onPress: () => navigation.goBack() },
-    ]);
+      Alert.alert('Success', `Product #${productCode} added successfully`, [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to add product. Please try again.');
+      console.error('Error adding product:', error);
+    }
   };
 
   return (
@@ -227,6 +260,35 @@ export default function AddProductScreen() {
                 <Text style={styles.changeImageText}>Change Photo</Text>
               </TouchableOpacity>
             )}
+          </View>
+        </View>
+
+        {/* Product Code */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Product Code *</Text>
+          <Text style={styles.sectionDescription}>
+            Unique number for quick search (e.g., type "12" to find Rice)
+          </Text>
+          <View style={styles.codeInputRow}>
+            <View style={styles.codePrefix}>
+              <Text style={styles.codePrefixText}>#</Text>
+            </View>
+            <TextInput
+              style={styles.codeInput}
+              placeholder="Enter unique code"
+              placeholderTextColor={colors.gray[400]}
+              value={productCode}
+              onChangeText={setProductCode}
+              keyboardType="number-pad"
+              maxLength={10}
+            />
+            <TouchableOpacity
+              style={styles.autoGenerateButton}
+              onPress={() => setProductCode(getNextProductCode())}
+            >
+              <Ionicons name="refresh" size={18} color={colors.white} />
+              <Text style={styles.autoGenerateText}>Auto</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -503,7 +565,56 @@ const styles = StyleSheet.create({
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
     color: colors.text.primary,
+    marginBottom: spacing.xs,
+  },
+  sectionDescription: {
+    fontSize: fontSize.sm,
+    color: colors.text.secondary,
     marginBottom: spacing.md,
+  },
+  codeInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  codePrefix: {
+    width: 40,
+    height: 48,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  codePrefixText: {
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.bold,
+    color: colors.accent,
+  },
+  codeInput: {
+    flex: 1,
+    backgroundColor: colors.gray[100],
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    color: colors.text.primary,
+    height: 48,
+  },
+  autoGenerateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.secondary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    height: 48,
+    gap: spacing.xs,
+  },
+  autoGenerateText: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+    color: colors.white,
   },
   inputLabel: {
     fontSize: fontSize.sm,

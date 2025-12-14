@@ -68,21 +68,41 @@ export default function BulkUploadScreen() {
         const products: any[] = [];
         const errors: string[] = [];
 
+        // Track used product codes to avoid duplicates within file
+        const usedCodes = new Set<string>();
+        const existingCodes = new Set(state.products.map(p => p.productCode).filter(Boolean));
+
         for (let i = 1; i < jsonData.length; i++) {
           const row = jsonData[i];
           if (!row || row.length === 0 || !row[0]) continue; // Skip empty rows
 
-          const nameEn = row[0]?.toString().trim();
-          const nameTa = row[1]?.toString().trim() || nameEn;
-          const categoryName = row[2]?.toString().trim();
-          const price = parseFloat(row[3]) || 0;
-          const unit = row[4]?.toString().trim() || 'piece';
-          const gstPercentage = parseFloat(row[5]) || 0;
-          const isGstInclusive = row[6]?.toString().toLowerCase() === 'yes';
-          const stock = parseInt(row[7]) || undefined;
-          const barcode = row[8]?.toString().trim() || undefined;
+          const productCode = row[0]?.toString().trim();
+          const nameEn = row[1]?.toString().trim();
+          const nameTa = row[2]?.toString().trim() || nameEn;
+          const categoryName = row[3]?.toString().trim();
+          const price = parseFloat(row[4]) || 0;
+          const unit = row[5]?.toString().trim() || 'piece';
+          const gstPercentage = parseFloat(row[6]) || 0;
+          const isGstInclusive = row[7]?.toString().toLowerCase() === 'yes';
+          const stock = parseInt(row[8]) || undefined;
+          const barcode = row[9]?.toString().trim() || undefined;
+          const imageUri = row[10]?.toString().trim() || undefined;
 
           // Validate required fields
+          if (!productCode) {
+            errors.push(`Row ${i + 1}: Missing product code`);
+            continue;
+          }
+          // Check for duplicate product code within file
+          if (usedCodes.has(productCode)) {
+            errors.push(`Row ${i + 1}: Duplicate product code "${productCode}" in file`);
+            continue;
+          }
+          // Check for duplicate product code in existing products
+          if (existingCodes.has(productCode)) {
+            errors.push(`Row ${i + 1}: Product code "${productCode}" already exists`);
+            continue;
+          }
           if (!nameEn) {
             errors.push(`Row ${i + 1}: Missing product name`);
             continue;
@@ -102,7 +122,9 @@ export default function BulkUploadScreen() {
             continue;
           }
 
+          usedCodes.add(productCode);
           products.push({
+            productCode,
             nameEn,
             nameTa,
             categoryId: category.id,
@@ -112,6 +134,7 @@ export default function BulkUploadScreen() {
             isGstInclusive,
             stock,
             barcode,
+            imageUri,
           });
         }
 
@@ -166,14 +189,20 @@ export default function BulkUploadScreen() {
   const handleDemoImport = () => {
     setIsProcessing(true);
 
+    // Get next available product code
+    const existingCodes = state.products
+      .map(p => parseInt(p.productCode || '0', 10))
+      .filter(code => !isNaN(code));
+    const maxCode = existingCodes.length > 0 ? Math.max(...existingCodes) : 10;
+
     // Simulate processing delay
     setTimeout(() => {
       const demoProducts = [
-        { nameEn: 'Basmati Rice', nameTa: 'பாசுமதி அரிசி', categoryId: '1', price: 120, gstPercentage: 5, isGstInclusive: false, unit: 'kg' },
-        { nameEn: 'Coconut Oil', nameTa: 'தேங்காய் எண்ணெய்', categoryId: '1', price: 180, gstPercentage: 5, isGstInclusive: false, unit: 'liter' },
-        { nameEn: 'Carrot', nameTa: 'கேரட்', categoryId: '2', price: 40, gstPercentage: 0, isGstInclusive: false, unit: 'kg' },
-        { nameEn: 'Spinach', nameTa: 'கீரை', categoryId: '2', price: 30, gstPercentage: 0, isGstInclusive: false, unit: 'bunch' },
-        { nameEn: 'Orange', nameTa: 'ஆரஞ்சு', categoryId: '3', price: 80, gstPercentage: 0, isGstInclusive: false, unit: 'kg' },
+        { productCode: String(maxCode + 1), nameEn: 'Basmati Rice', nameTa: 'பாசுமதி அரிசி', categoryId: '1', price: 120, gstPercentage: 5, isGstInclusive: false, unit: 'kg' },
+        { productCode: String(maxCode + 2), nameEn: 'Coconut Oil', nameTa: 'தேங்காய் எண்ணெய்', categoryId: '1', price: 180, gstPercentage: 5, isGstInclusive: false, unit: 'liter' },
+        { productCode: String(maxCode + 3), nameEn: 'Carrot', nameTa: 'கேரட்', categoryId: '2', price: 40, gstPercentage: 0, isGstInclusive: false, unit: 'kg' },
+        { productCode: String(maxCode + 4), nameEn: 'Spinach', nameTa: 'கீரை', categoryId: '2', price: 30, gstPercentage: 0, isGstInclusive: false, unit: 'bunch' },
+        { productCode: String(maxCode + 5), nameEn: 'Orange', nameTa: 'ஆரஞ்சு', categoryId: '3', price: 80, gstPercentage: 0, isGstInclusive: false, unit: 'kg' },
       ];
 
       addProductsBulk(demoProducts);
@@ -191,10 +220,17 @@ export default function BulkUploadScreen() {
       // Create workbook
       const workbook = XLSX.utils.book_new();
 
+      // Get next available product codes for samples
+      const existingCodes = state.products
+        .map(p => parseInt(p.productCode || '0', 10))
+        .filter(code => !isNaN(code));
+      const maxCode = existingCodes.length > 0 ? Math.max(...existingCodes) : 100;
+
       // Products Sheet - Headers and sample data
       const productsData = [
         // Header row
         [
+          'Product Code *',
           'Name (English) *',
           'Name (Tamil)',
           'Category *',
@@ -204,9 +240,11 @@ export default function BulkUploadScreen() {
           'GST Inclusive (Yes/No)',
           'Stock',
           'Barcode',
+          'Image URL',
         ],
         // Sample data rows
         [
+          String(maxCode + 1),
           'Sample Product',
           'மாதிரி பொருள்',
           state.categories[0]?.nameEn || 'Grocery',
@@ -216,8 +254,10 @@ export default function BulkUploadScreen() {
           'No',
           '50',
           '',
+          'https://example.com/image1.jpg',
         ],
         [
+          String(maxCode + 2),
           'Another Product',
           'மற்றொரு பொருள்',
           state.categories[1]?.nameEn || 'Vegetables',
@@ -227,6 +267,7 @@ export default function BulkUploadScreen() {
           'No',
           '100',
           '',
+          '',
         ],
       ];
 
@@ -234,6 +275,7 @@ export default function BulkUploadScreen() {
 
       // Set column widths
       productsSheet['!cols'] = [
+        { wch: 15 }, // Product Code
         { wch: 20 }, // Name English
         { wch: 20 }, // Name Tamil
         { wch: 15 }, // Category
@@ -243,6 +285,7 @@ export default function BulkUploadScreen() {
         { wch: 20 }, // GST Inclusive
         { wch: 10 }, // Stock
         { wch: 15 }, // Barcode
+        { wch: 35 }, // Image URL
       ];
 
       XLSX.utils.book_append_sheet(workbook, productsSheet, 'Products');
@@ -278,6 +321,7 @@ export default function BulkUploadScreen() {
         ['BULK UPLOAD INSTRUCTIONS'],
         [''],
         ['Required Columns (marked with *):'],
+        ['- Product Code: Unique number for quick search (e.g., 101, 102)'],
         ['- Name (English): Product name in English'],
         ['- Category: Must match exactly with categories in Categories sheet'],
         ['- Price: Numeric value (e.g., 100, 50.50)'],
@@ -289,12 +333,15 @@ export default function BulkUploadScreen() {
         ['- GST Inclusive: Yes or No'],
         ['- Stock: Numeric value for inventory'],
         ['- Barcode: Product barcode if available'],
+        ['- Image URL: Web URL to product image (https://...)'],
         [''],
         ['NOTES:'],
         ['1. Do not change the header row'],
         ['2. Delete sample data rows before adding your products'],
-        ['3. Category names must match exactly (case-sensitive)'],
-        ['4. Save file as .xlsx format'],
+        ['3. Product codes must be unique - no duplicates allowed'],
+        ['4. Category names must match exactly (case-insensitive)'],
+        ['5. Image URL must be a valid web URL (https://example.com/image.jpg)'],
+        ['6. Save file as .xlsx format'],
       ];
       const instructionsSheet = XLSX.utils.aoa_to_sheet(instructionsData);
       instructionsSheet['!cols'] = [{ wch: 60 }];
@@ -445,23 +492,25 @@ export default function BulkUploadScreen() {
 
       {/* Column Reference */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Required Columns</Text>
+        <Text style={styles.sectionTitle}>Column Reference</Text>
         <View style={styles.columnTable}>
           <View style={styles.columnRow}>
-            <Text style={styles.columnHeader}>Column</Text>
+            <Text style={styles.columnHeader}>Col</Text>
             <Text style={styles.columnHeader}>Field</Text>
             <Text style={styles.columnHeader}>Required</Text>
           </View>
           {[
-            { col: 'A', field: 'Name (English)', required: true },
-            { col: 'B', field: 'Name (Tamil)', required: false },
-            { col: 'C', field: 'Category', required: true },
-            { col: 'D', field: 'Price', required: true },
-            { col: 'E', field: 'Unit', required: true },
-            { col: 'F', field: 'GST %', required: false },
-            { col: 'G', field: 'GST Inclusive', required: false },
-            { col: 'H', field: 'Stock', required: false },
-            { col: 'I', field: 'Barcode', required: false },
+            { col: 'A', field: 'Product Code', required: true },
+            { col: 'B', field: 'Name (English)', required: true },
+            { col: 'C', field: 'Name (Tamil)', required: false },
+            { col: 'D', field: 'Category', required: true },
+            { col: 'E', field: 'Price', required: true },
+            { col: 'F', field: 'Unit', required: true },
+            { col: 'G', field: 'GST %', required: false },
+            { col: 'H', field: 'GST Inclusive', required: false },
+            { col: 'I', field: 'Stock', required: false },
+            { col: 'J', field: 'Barcode', required: false },
+            { col: 'K', field: 'Image URL', required: false },
           ].map((row, index) => (
             <View key={index} style={styles.columnRow}>
               <Text style={styles.columnCell}>{row.col}</Text>
@@ -472,6 +521,20 @@ export default function BulkUploadScreen() {
             </View>
           ))}
         </View>
+      </View>
+
+      {/* Image URL Info */}
+      <View style={styles.imageInfoCard}>
+        <View style={styles.imageInfoHeader}>
+          <Ionicons name="image-outline" size={20} color={colors.secondary} />
+          <Text style={styles.imageInfoTitle}>About Image URLs</Text>
+        </View>
+        <Text style={styles.imageInfoText}>
+          • Use direct image URLs (ending in .jpg, .png, etc.){'\n'}
+          • Images must be publicly accessible{'\n'}
+          • Example: https://example.com/products/rice.jpg{'\n'}
+          • Leave empty to add images later manually
+        </Text>
       </View>
 
       <View style={styles.bottomPadding} />
@@ -666,6 +729,29 @@ const styles = StyleSheet.create({
   requiredCell: {
     color: colors.error,
     fontWeight: fontWeight.medium,
+  },
+  imageInfoCard: {
+    backgroundColor: colors.secondary + '15',
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
+  },
+  imageInfoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  imageInfoTitle: {
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
+    color: colors.secondary,
+  },
+  imageInfoText: {
+    fontSize: fontSize.sm,
+    color: colors.text.secondary,
+    lineHeight: 20,
   },
   bottomPadding: {
     height: spacing.xxl,

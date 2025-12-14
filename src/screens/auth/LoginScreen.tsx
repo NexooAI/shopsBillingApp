@@ -16,14 +16,14 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../theme';
 import { useApp } from '../../context/AppContext';
-import { RootStackParamList, LoginMethod } from '../../navigation/AppNavigator';
+import { RootStackParamList } from '../../navigation/AppNavigator';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function LoginScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { login, loginWithPhone } = useApp();
-  
+
   const [loginMethod, setLoginMethod] = useState<'phone' | 'username'>('username');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -42,7 +42,7 @@ export default function LoginScreen() {
       const success = login(username, password);
       setIsLoading(false);
       if (!success) {
-        Alert.alert('Error', 'Invalid credentials.\n\nTry:\n• Admin: admin/admin123\n• Staff: user/user123');
+        Alert.alert('Error', 'Invalid credentials.\n\nTry:\n• Super Admin: superadmin/superadmin123\n• Admin: admin/admin123\n• Staff: user/user123');
       }
     }, 500);
   };
@@ -57,11 +57,11 @@ export default function LoginScreen() {
       return;
     }
     setIsLoading(true);
-    setTimeout(() => {
-      const success = loginWithPhone(phone, pin);
+    setTimeout(async () => {
+      const success = await loginWithPhone(phone, pin);
       setIsLoading(false);
       if (!success) {
-        Alert.alert('Error', 'Invalid phone or PIN.\n\nTry:\n• Admin: 9999999999/1234\n• Staff: 8888888888/4321');
+        Alert.alert('Error', 'Invalid phone or PIN.\n\nTry:\n• Super Admin: 9999999999/0000\n• Admin: 8888888888/1234\n• Staff: 7777777777/4321');
       }
     }, 500);
   };
@@ -232,17 +232,27 @@ export default function LoginScreen() {
         {/* Demo Credentials */}
         <View style={styles.demoContainer}>
           <Text style={styles.demoTitle}>Demo Credentials</Text>
-          
+
+          {/* Super Admin Credentials */}
+          <View style={styles.credentialCard}>
+            <View style={styles.credentialHeader}>
+              <Ionicons name="shield-checkmark" size={16} color={colors.error} />
+              <Text style={styles.credentialRoleSuperAdmin}>Super Admin Login</Text>
+            </View>
+            <Text style={styles.demoText}>Username: superadmin | Password: superadmin123</Text>
+            <Text style={styles.demoText}>Phone: 9999999999 | PIN: 0000</Text>
+          </View>
+
           {/* Admin Credentials */}
           <View style={styles.credentialCard}>
             <View style={styles.credentialHeader}>
-              <Ionicons name="shield-checkmark" size={16} color={colors.accent} />
+              <Ionicons name="shield" size={16} color={colors.accent} />
               <Text style={styles.credentialRole}>Admin Login</Text>
             </View>
             <Text style={styles.demoText}>Username: admin | Password: admin123</Text>
-            <Text style={styles.demoText}>Phone: 9999999999 | PIN: 1234</Text>
+            <Text style={styles.demoText}>Phone: 8888888888 | PIN: 1234</Text>
           </View>
-          
+
           {/* User/Staff Credentials */}
           <View style={styles.credentialCard}>
             <View style={styles.credentialHeader}>
@@ -250,7 +260,7 @@ export default function LoginScreen() {
               <Text style={styles.credentialRoleUser}>Staff Login</Text>
             </View>
             <Text style={styles.demoText}>Username: user | Password: user123</Text>
-            <Text style={styles.demoText}>Phone: 8888888888 | PIN: 4321</Text>
+            <Text style={styles.demoText}>Phone: 7777777777 | PIN: 4321</Text>
           </View>
         </View>
 
@@ -396,6 +406,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     marginBottom: spacing.xs,
+  },
+  credentialRoleSuperAdmin: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+    color: colors.error,
   },
   credentialRole: {
     fontSize: fontSize.sm,

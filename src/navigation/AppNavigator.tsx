@@ -25,6 +25,7 @@ import AddCategoryScreen from '../screens/admin/AddCategoryScreen';
 import BulkUploadScreen from '../screens/admin/BulkUploadScreen';
 import SettingsScreen from '../screens/admin/SettingsScreen';
 import ServerSyncScreen from '../screens/admin/ServerSyncScreen';
+import PrinterSettingsScreen from '../screens/admin/PrinterSettingsScreen';
 
 // Bill Screen
 import BillPreviewScreen from '../screens/billing/BillPreviewScreen';
@@ -42,6 +43,7 @@ export type RootStackParamList = {
   BulkUpload: undefined;
   Settings: undefined;
   ServerSync: undefined;
+  PrinterSettings: undefined;
   BillPreview: { bill: any };
 };
 
@@ -57,7 +59,7 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 
 function MainTabs() {
   const { state } = useApp();
-  const isAdmin = state.user?.role === 'admin';
+  const isAdmin = state.user?.role === 'admin' || state.user?.role === 'super_admin';
 
   return (
     <Tab.Navigator
@@ -200,6 +202,11 @@ export default function AppNavigator() {
               name="ServerSync"
               component={ServerSyncScreen}
               options={{ title: 'Server Sync' }}
+            />
+            <Stack.Screen
+              name="PrinterSettings"
+              component={PrinterSettingsScreen}
+              options={{ title: 'Printer Settings' }}
             />
             <Stack.Screen
               name="BillPreview"

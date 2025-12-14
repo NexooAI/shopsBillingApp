@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'user';
+export type UserRole = 'super_admin' | 'admin' | 'user';
 
 export interface User {
   id: string;
@@ -21,6 +21,7 @@ export interface Category {
 
 export interface Product {
   id: string;
+  productCode?: string;  // Unique product number (e.g., "12" for Rice)
   nameEn: string;
   nameTa: string;
   categoryId: string;
@@ -29,7 +30,7 @@ export interface Product {
   isGstInclusive: boolean;
   unit: string;
   stock?: number;
-  barcode?: string;
+  barcode?: string;      // Barcode for scanner
   imageUri?: string;
   createdAt: Date;
 }

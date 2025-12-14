@@ -1,13 +1,13 @@
 {
   "expo": {
     "name": "Shops Billing App",
-    "slug": "shops-billing-app",
+    "slug": "mnv-billings",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/splash.jpeg",
       "resizeMode": "contain",
       "backgroundColor": "#1a1a2e",
       "dark": {
@@ -40,6 +40,15 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-sqlite"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "14beefba-b017-4cbd-bfc4-0ea903c9a069"
+      }
+    },
+    "owner": "mohandass9788"
   }
 }

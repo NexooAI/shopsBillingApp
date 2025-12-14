@@ -24,24 +24,47 @@ interface UserCardProps {
 }
 
 function UserCard({ user, isCurrentUser, onDelete }: UserCardProps) {
+  const isSuperAdmin = user.role === 'super_admin';
   const isAdmin = user.role === 'admin';
-  const isMaster = user.id === 'master';
+  const isMaster = user.id === 'superadmin';
+
+  const getAvatarIcon = () => {
+    if (isSuperAdmin) return 'shield-checkmark';
+    if (isAdmin) return 'shield';
+    return 'person';
+  };
+
+  const getAvatarColor = () => {
+    if (isSuperAdmin) return colors.error;
+    if (isAdmin) return colors.accent;
+    return colors.secondary;
+  };
+
+  const getRoleLabel = () => {
+    if (isSuperAdmin) return 'Super Administrator';
+    if (isAdmin) return 'Administrator';
+    return 'Staff Member';
+  };
 
   return (
     <View style={styles.userCard}>
-      <View style={[styles.avatarContainer, isAdmin && styles.adminAvatar]}>
+      <View style={[
+        styles.avatarContainer, 
+        isSuperAdmin && styles.superAdminAvatar,
+        isAdmin && !isSuperAdmin && styles.adminAvatar
+      ]}>
         <Ionicons
-          name={isAdmin ? 'shield' : 'person'}
+          name={getAvatarIcon()}
           size={24}
-          color={isAdmin ? colors.accent : colors.secondary}
+          color={getAvatarColor()}
         />
       </View>
       <View style={styles.userInfo}>
         <View style={styles.nameRow}>
           <Text style={styles.username}>{user.username}</Text>
           {isMaster && (
-            <View style={styles.masterBadge}>
-              <Text style={styles.masterBadgeText}>Master</Text>
+            <View style={styles.superAdminBadge}>
+              <Text style={styles.superAdminBadgeText}>Master</Text>
             </View>
           )}
           {isCurrentUser && (
@@ -50,9 +73,7 @@ function UserCard({ user, isCurrentUser, onDelete }: UserCardProps) {
             </View>
           )}
         </View>
-        <Text style={styles.userRole}>
-          {isAdmin ? 'Administrator' : 'Staff Member'}
-        </Text>
+        <Text style={styles.userRole}>{getRoleLabel()}</Text>
         {user.phone && (
           <Text style={styles.userPhone}>📱 {user.phone}</Text>
         )}
@@ -74,7 +95,29 @@ export default function UserManagementScreen() {
   const [newPin, setNewPin] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('user');
 
+  // Current user role permissions
+  const currentUserRole = state.user?.role;
+  const isSuperAdmin = currentUserRole === 'super_admin';
+  const isAdmin = currentUserRole === 'admin';
+  
+  // Permission checks
+  const canCreateAdmin = isSuperAdmin; // Only super admin can create admins
+  const canCreateUser = isSuperAdmin || isAdmin; // Both super admin and admin can create users
+  const canAccessUserManagement = isSuperAdmin || isAdmin; // Only admins and super admins can access this screen
+
   const handleDeleteUser = (user: User) => {
+    // Super admin cannot be deleted
+    if (user.role === 'super_admin') {
+      Alert.alert('Error', 'Super Admin cannot be deleted');
+      return;
+    }
+    
+    // Admin can only delete users, not other admins
+    if (isAdmin && user.role === 'admin') {
+      Alert.alert('Error', 'You do not have permission to delete administrators');
+      return;
+    }
+
     Alert.alert(
       'Delete User',
       `Are you sure you want to delete "${user.username}"?`,
@@ -112,6 +155,12 @@ export default function UserManagementScreen() {
       return;
     }
 
+    // Permission check for creating admin
+    if (newRole === 'admin' && !canCreateAdmin) {
+      Alert.alert('Error', 'You do not have permission to create administrators');
+      return;
+    }
+
     addUser({
       username: newUsername,
       phone: newPhone || undefined,
@@ -131,6 +180,7 @@ export default function UserManagementScreen() {
     );
   };
 
+  const superAdmins = state.users.filter((u) => u.role === 'super_admin');
   const admins = state.users.filter((u) => u.role === 'admin');
   const staff = state.users.filter((u) => u.role === 'user');
 
@@ -138,6 +188,12 @@ export default function UserManagementScreen() {
     <View style={styles.container}>
       {/* Stats */}
       <View style={styles.statsContainer}>
+        <View style={styles.statBox}>
+          <Ionicons name="shield-checkmark" size={24} color={colors.error} />
+          <Text style={styles.statValue}>{superAdmins.length}</Text>
+          <Text style={styles.statLabel}>Super Admin</Text>
+        </View>
+        <View style={styles.statDivider} />
         <View style={styles.statBox}>
           <Ionicons name="shield" size={24} color={colors.accent} />
           <Text style={styles.statValue}>{admins.length}</Text>
@@ -253,25 +309,37 @@ export default function UserManagementScreen() {
                     Staff
                   </Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.roleOption, newRole === 'admin' && styles.roleOptionActive]}
-                  onPress={() => setNewRole('admin')}
-                >
-                  <Ionicons
-                    name="shield"
-                    size={20}
-                    color={newRole === 'admin' ? colors.white : colors.gray[500]}
-                  />
-                  <Text
-                    style={[
-                      styles.roleOptionText,
-                      newRole === 'admin' && styles.roleOptionTextActive,
-                    ]}
+                {canCreateAdmin && (
+                  <TouchableOpacity
+                    style={[styles.roleOption, newRole === 'admin' && styles.roleOptionActive]}
+                    onPress={() => setNewRole('admin')}
                   >
-                    Admin
-                  </Text>
-                </TouchableOpacity>
+                    <Ionicons
+                      name="shield"
+                      size={20}
+                      color={newRole === 'admin' ? colors.white : colors.gray[500]}
+                    />
+                    <Text
+                      style={[
+                        styles.roleOptionText,
+                        newRole === 'admin' && styles.roleOptionTextActive,
+                      ]}
+                    >
+                      Admin
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
+              
+              {/* Permission note for admins */}
+              {!canCreateAdmin && (
+                <View style={styles.permissionNote}>
+                  <Ionicons name="lock-closed" size={14} color={colors.warning} />
+                  <Text style={styles.permissionNoteText}>
+                    Only Super Admin can create Administrator accounts
+                  </Text>
+                </View>
+              )}
 
               {/* Note */}
               <View style={styles.noteBox}>
@@ -355,6 +423,9 @@ const styles = StyleSheet.create({
   adminAvatar: {
     backgroundColor: colors.accent + '20',
   },
+  superAdminAvatar: {
+    backgroundColor: colors.error + '20',
+  },
   userInfo: {
     flex: 1,
     marginLeft: spacing.md,
@@ -369,16 +440,16 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
     color: colors.text.primary,
   },
-  masterBadge: {
-    backgroundColor: colors.accent,
+  superAdminBadge: {
+    backgroundColor: colors.error,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: borderRadius.sm,
   },
-  masterBadgeText: {
+  superAdminBadgeText: {
     fontSize: fontSize.xs,
     fontWeight: fontWeight.bold,
-    color: colors.primary,
+    color: colors.white,
   },
   youBadge: {
     backgroundColor: colors.info + '20',
@@ -501,6 +572,17 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: fontSize.sm,
     color: colors.info,
+  },
+  permissionNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  permissionNoteText: {
+    fontSize: fontSize.xs,
+    color: colors.warning,
   },
   createButton: {
     backgroundColor: colors.accent,

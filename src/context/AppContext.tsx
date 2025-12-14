@@ -1,56 +1,15 @@
-import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { createContext, useContext, useReducer, useEffect, ReactNode, useState } from 'react';
 import { User, Category, Product, CartItem, Bill, AppState, UserRole } from '../types';
-
-// Initial demo data
-const MASTER_USER: User = {
-  id: 'master',
-  username: 'admin',
-  phone: '9999999999',
-  role: 'admin',
-  pin: '1234',
-  createdAt: new Date(),
-};
-
-const DEMO_STAFF_USER: User = {
-  id: 'staff1',
-  username: 'user',
-  phone: '8888888888',
-  role: 'user',
-  pin: '4321',
-  createdAt: new Date(),
-};
-
-const DEMO_CATEGORIES: Category[] = [
-  { id: '1', nameEn: 'Grocery', nameTa: 'மளிகை', icon: 'basket', color: '#e74c3c', createdAt: new Date() },
-  { id: '2', nameEn: 'Vegetables', nameTa: 'காய்கறிகள்', icon: 'leaf', color: '#27ae60', createdAt: new Date() },
-  { id: '3', nameEn: 'Fruits', nameTa: 'பழங்கள்', icon: 'nutrition', color: '#f39c12', createdAt: new Date() },
-  { id: '4', nameEn: 'Dairy', nameTa: 'பால் பொருட்கள்', icon: 'water', color: '#3498db', createdAt: new Date() },
-  { id: '5', nameEn: 'Beverages', nameTa: 'பானங்கள்', icon: 'cafe', color: '#9b59b6', createdAt: new Date() },
-  { id: '6', nameEn: 'Snacks', nameTa: 'தின்பண்டங்கள்', icon: 'fast-food', color: '#e67e22', createdAt: new Date() },
-];
-
-const DEMO_PRODUCTS: Product[] = [
-  { id: '1', nameEn: 'Rice', nameTa: 'அரிசி', categoryId: '1', price: 60, gstPercentage: 5, isGstInclusive: false, unit: 'kg', stock: 100, createdAt: new Date() },
-  { id: '2', nameEn: 'Wheat', nameTa: 'கோதுமை', categoryId: '1', price: 45, gstPercentage: 5, isGstInclusive: false, unit: 'kg', stock: 80, createdAt: new Date() },
-  { id: '3', nameEn: 'Sugar', nameTa: 'சர்க்கரை', categoryId: '1', price: 42, gstPercentage: 5, isGstInclusive: false, unit: 'kg', stock: 50, createdAt: new Date() },
-  { id: '4', nameEn: 'Tomato', nameTa: 'தக்காளி', categoryId: '2', price: 30, gstPercentage: 0, isGstInclusive: false, unit: 'kg', stock: 40, createdAt: new Date() },
-  { id: '5', nameEn: 'Onion', nameTa: 'வெங்காயம்', categoryId: '2', price: 35, gstPercentage: 0, isGstInclusive: false, unit: 'kg', stock: 60, createdAt: new Date() },
-  { id: '6', nameEn: 'Potato', nameTa: 'உருளைக்கிழங்கு', categoryId: '2', price: 25, gstPercentage: 0, isGstInclusive: false, unit: 'kg', stock: 70, createdAt: new Date() },
-  { id: '7', nameEn: 'Apple', nameTa: 'ஆப்பிள்', categoryId: '3', price: 180, gstPercentage: 0, isGstInclusive: false, unit: 'kg', stock: 30, createdAt: new Date() },
-  { id: '8', nameEn: 'Banana', nameTa: 'வாழைப்பழம்', categoryId: '3', price: 50, gstPercentage: 0, isGstInclusive: false, unit: 'dozen', stock: 50, createdAt: new Date() },
-  { id: '9', nameEn: 'Milk', nameTa: 'பால்', categoryId: '4', price: 54, gstPercentage: 5, isGstInclusive: true, unit: 'liter', stock: 100, createdAt: new Date() },
-  { id: '10', nameEn: 'Curd', nameTa: 'தயிர்', categoryId: '4', price: 45, gstPercentage: 5, isGstInclusive: true, unit: 'liter', stock: 40, createdAt: new Date() },
-];
+import * as Database from '../services/sqliteDatabase';
 
 const initialState: AppState = {
   user: null,
   isAuthenticated: false,
-  categories: DEMO_CATEGORIES,
-  products: DEMO_PRODUCTS,
+  categories: [],
+  products: [],
   cart: [],
   bills: [],
-  users: [MASTER_USER, DEMO_STAFF_USER],
+  users: [],
 };
 
 type Action =
@@ -171,119 +130,240 @@ interface AppContextType {
   state: AppState;
   dispatch: React.Dispatch<Action>;
   login: (username: string, password: string) => boolean;
-  loginWithPhone: (phone: string, pin: string) => boolean;
+  loginWithPhone: (phone: string, pin: string) => Promise<boolean>;
   logout: () => void;
-  addCategory: (category: Omit<Category, 'id' | 'createdAt'>) => void;
-  addProduct: (product: Omit<Product, 'id' | 'createdAt'>) => void;
-  addProductsBulk: (products: Omit<Product, 'id' | 'createdAt'>[]) => void;
+  addCategory: (category: Omit<Category, 'id' | 'createdAt'>) => Promise<void>;
+  updateCategory: (category: Category) => Promise<void>;
+  deleteCategory: (id: string) => Promise<void>;
+  addProduct: (product: Omit<Product, 'id' | 'createdAt'>) => Promise<void>;
+  updateProduct: (product: Product) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
+  addProductsBulk: (products: Omit<Product, 'id' | 'createdAt'>[]) => Promise<void>;
   addToCart: (product: Product, quantity?: number) => void;
   updateCartItem: (productId: string, quantity: number) => void;
   removeFromCart: (productId: string) => void;
   clearCart: () => void;
-  createBill: () => Bill | null;
-  addUser: (user: Omit<User, 'id' | 'createdAt' | 'createdBy'>) => void;
+  createBill: () => Promise<Bill | null>;
+  addUser: (user: Omit<User, 'id' | 'createdAt' | 'createdBy'>) => Promise<void>;
+  updateUser: (user: User) => Promise<void>;
+  deleteUser: (id: string) => Promise<void>;
   getProductsByCategory: (categoryId: string) => Product[];
   getDailySales: (date?: Date) => { totalRevenue: number; totalProducts: number; totalCustomers: number; bills: Bill[] };
+  isLoading: boolean;
+  refreshData: () => Promise<void>;
+  // New SQLite-powered search functions
+  searchProducts: (query: string) => Promise<Product[]>;
+  getProductByBarcode: (barcode: string) => Promise<Product | null>;
+  getProductByCode: (code: string) => Promise<Product | null>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Persist state to AsyncStorage
+  // Initialize SQLite database and load data
   useEffect(() => {
-    const saveState = async () => {
+    const initApp = async () => {
       try {
-        await AsyncStorage.setItem('appState', JSON.stringify({
-          categories: state.categories,
-          products: state.products,
-          bills: state.bills,
-          users: state.users,
-        }));
+        setIsLoading(true);
+        await Database.initDatabase();
+        await loadDataFromDatabase();
       } catch (error) {
-        console.error('Error saving state:', error);
+        console.error('Error initializing app:', error);
+      } finally {
+        setIsLoading(false);
       }
     };
-    saveState();
-  }, [state.categories, state.products, state.bills, state.users]);
-
-  // Load state from AsyncStorage on mount
-  useEffect(() => {
-    const loadState = async () => {
-      try {
-        const savedState = await AsyncStorage.getItem('appState');
-        if (savedState) {
-          const parsed = JSON.parse(savedState);
-          dispatch({ type: 'LOAD_STATE', payload: parsed });
-        }
-      } catch (error) {
-        console.error('Error loading state:', error);
-      }
-    };
-    loadState();
+    initApp();
   }, []);
 
+  // Load all data from SQLite database (optimized for large datasets)
+  const loadDataFromDatabase = async () => {
+    try {
+      const [categories, products, bills, users] = await Promise.all([
+        Database.getAllCategories(),
+        Database.getAllProducts(500), // Load first 500 products for initial view
+        Database.getAllBills(100),    // Load last 100 bills
+        Database.getAllUsers(),
+      ]);
+
+      dispatch({
+        type: 'LOAD_STATE',
+        payload: { categories, products, bills, users },
+      });
+    } catch (error) {
+      console.error('Error loading data from database:', error);
+    }
+  };
+
+  // Search products (uses SQLite indexes for fast search)
+  const searchProducts = async (query: string): Promise<Product[]> => {
+    try {
+      return await Database.searchProducts(query);
+    } catch (error) {
+      console.error('Error searching products:', error);
+      return [];
+    }
+  };
+
+  // Get product by barcode (instant lookup)
+  const getProductByBarcode = async (barcode: string): Promise<Product | null> => {
+    try {
+      return await Database.getProductByBarcode(barcode);
+    } catch (error) {
+      console.error('Error getting product by barcode:', error);
+      return null;
+    }
+  };
+
+  // Get product by code (instant lookup)
+  const getProductByCode = async (code: string): Promise<Product | null> => {
+    try {
+      return await Database.getProductByCode(code);
+    } catch (error) {
+      console.error('Error getting product by code:', error);
+      return null;
+    }
+  };
+
+  // Refresh data from database
+  const refreshData = async () => {
+    await loadDataFromDatabase();
+  };
+
   const login = (username: string, password: string): boolean => {
+    // Find user by username
+    const user = state.users.find(u => u.username === username);
+
+    // Super Admin login: superadmin/superadmin123
+    if (username === 'superadmin' && password === 'superadmin123' && user) {
+      dispatch({ type: 'LOGIN', payload: user });
+      return true;
+    }
     // Admin login: admin/admin123
-    if (username === 'admin' && password === 'admin123') {
-      dispatch({ type: 'LOGIN', payload: MASTER_USER });
+    if (username === 'admin' && password === 'admin123' && user) {
+      dispatch({ type: 'LOGIN', payload: user });
       return true;
     }
     // Staff/User login: user/user123
-    if (username === 'user' && password === 'user123') {
-      dispatch({ type: 'LOGIN', payload: DEMO_STAFF_USER });
+    if (username === 'user' && password === 'user123' && user) {
+      dispatch({ type: 'LOGIN', payload: user });
       return true;
     }
     // Check other users (password is same as username + 123 for demo)
-    const user = state.users.find(
-      (u) => u.username === username && password === `${username}123`
-    );
-    if (user) {
+    if (user && password === `${username}123`) {
       dispatch({ type: 'LOGIN', payload: user });
       return true;
     }
     return false;
   };
 
-  const loginWithPhone = (phone: string, pin: string): boolean => {
-    const user = state.users.find((u) => u.phone === phone && u.pin === pin);
-    if (user) {
-      dispatch({ type: 'LOGIN', payload: user });
-      return true;
+  const loginWithPhone = async (phone: string, pin: string): Promise<boolean> => {
+    try {
+      const user = await Database.getUserByPhoneAndPin(phone, pin);
+      if (user) {
+        dispatch({ type: 'LOGIN', payload: user });
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error logging in with phone:', error);
+      return false;
     }
-    return false;
   };
 
   const logout = () => {
     dispatch({ type: 'LOGOUT' });
   };
 
-  const addCategory = (category: Omit<Category, 'id' | 'createdAt'>) => {
+  const addCategory = async (category: Omit<Category, 'id' | 'createdAt'>) => {
     const newCategory: Category = {
       ...category,
       id: Date.now().toString(),
       createdAt: new Date(),
     };
-    dispatch({ type: 'ADD_CATEGORY', payload: newCategory });
+
+    try {
+      await Database.insertCategory(newCategory);
+      dispatch({ type: 'ADD_CATEGORY', payload: newCategory });
+    } catch (error) {
+      console.error('Error adding category:', error);
+      throw error;
+    }
   };
 
-  const addProduct = (product: Omit<Product, 'id' | 'createdAt'>) => {
+  const updateCategory = async (category: Category) => {
+    try {
+      await Database.updateCategory(category);
+      dispatch({ type: 'UPDATE_CATEGORY', payload: category });
+    } catch (error) {
+      console.error('Error updating category:', error);
+      throw error;
+    }
+  };
+
+  const deleteCategory = async (id: string) => {
+    try {
+      await Database.deleteCategory(id);
+      dispatch({ type: 'DELETE_CATEGORY', payload: id });
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      throw error;
+    }
+  };
+
+  const addProduct = async (product: Omit<Product, 'id' | 'createdAt'>) => {
     const newProduct: Product = {
       ...product,
       id: Date.now().toString(),
       createdAt: new Date(),
     };
-    dispatch({ type: 'ADD_PRODUCT', payload: newProduct });
+
+    try {
+      await Database.insertProduct(newProduct);
+      dispatch({ type: 'ADD_PRODUCT', payload: newProduct });
+    } catch (error) {
+      console.error('Error adding product:', error);
+      throw error;
+    }
   };
 
-  const addProductsBulk = (products: Omit<Product, 'id' | 'createdAt'>[]) => {
+  const updateProduct = async (product: Product) => {
+    try {
+      await Database.updateProduct(product);
+      dispatch({ type: 'UPDATE_PRODUCT', payload: product });
+    } catch (error) {
+      console.error('Error updating product:', error);
+      throw error;
+    }
+  };
+
+  const deleteProduct = async (id: string) => {
+    try {
+      await Database.deleteProduct(id);
+      dispatch({ type: 'DELETE_PRODUCT', payload: id });
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      throw error;
+    }
+  };
+
+  const addProductsBulk = async (products: Omit<Product, 'id' | 'createdAt'>[]) => {
     const newProducts: Product[] = products.map((p, index) => ({
       ...p,
       id: `${Date.now()}-${index}`,
       createdAt: new Date(),
     }));
-    dispatch({ type: 'ADD_PRODUCTS_BULK', payload: newProducts });
+
+    try {
+      await Database.insertProductsBulk(newProducts);
+      dispatch({ type: 'ADD_PRODUCTS_BULK', payload: newProducts });
+    } catch (error) {
+      console.error('Error adding products in bulk:', error);
+      throw error;
+    }
   };
 
   const addToCart = (product: Product, quantity: number = 1) => {
@@ -306,7 +386,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'CLEAR_CART' });
   };
 
-  const createBill = (): Bill | null => {
+  const createBill = async (): Promise<Bill | null> => {
     if (state.cart.length === 0 || !state.user) return null;
 
     let subtotal = 0;
@@ -334,19 +414,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
       createdBy: state.user.id,
     };
 
-    dispatch({ type: 'ADD_BILL', payload: bill });
-    dispatch({ type: 'CLEAR_CART' });
-    return bill;
+    try {
+      await Database.insertBill(bill);
+      dispatch({ type: 'ADD_BILL', payload: bill });
+      dispatch({ type: 'CLEAR_CART' });
+      return bill;
+    } catch (error) {
+      console.error('Error creating bill:', error);
+      throw error;
+    }
   };
 
-  const addUser = (user: Omit<User, 'id' | 'createdAt' | 'createdBy'>) => {
+  const addUser = async (user: Omit<User, 'id' | 'createdAt' | 'createdBy'>) => {
     const newUser: User = {
       ...user,
       id: Date.now().toString(),
       createdAt: new Date(),
       createdBy: state.user?.id,
     };
-    dispatch({ type: 'ADD_USER', payload: newUser });
+
+    try {
+      await Database.insertUser(newUser);
+      dispatch({ type: 'ADD_USER', payload: newUser });
+    } catch (error) {
+      console.error('Error adding user:', error);
+      throw error;
+    }
+  };
+
+  const updateUser = async (user: User) => {
+    try {
+      await Database.updateUser(user);
+      dispatch({ type: 'UPDATE_USER', payload: user });
+    } catch (error) {
+      console.error('Error updating user:', error);
+      throw error;
+    }
+  };
+
+  const deleteUser = async (id: string) => {
+    try {
+      await Database.deleteUser(id);
+      dispatch({ type: 'DELETE_USER', payload: id });
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      throw error;
+    }
   };
 
   const getProductsByCategory = (categoryId: string): Product[] => {
@@ -379,7 +492,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         loginWithPhone,
         logout,
         addCategory,
+        updateCategory,
+        deleteCategory,
         addProduct,
+        updateProduct,
+        deleteProduct,
         addProductsBulk,
         addToCart,
         updateCartItem,
@@ -387,8 +504,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         clearCart,
         createBill,
         addUser,
+        updateUser,
+        deleteUser,
         getProductsByCategory,
         getDailySales,
+        isLoading,
+        refreshData,
+        searchProducts,
+        getProductByBarcode,
+        getProductByCode,
       }}
     >
       {children}
@@ -403,4 +527,3 @@ export function useApp() {
   }
   return context;
 }
-

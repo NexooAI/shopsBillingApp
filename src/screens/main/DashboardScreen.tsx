@@ -62,7 +62,8 @@ function StatCard({ icon, title, value, color }: StatCardProps) {
 export default function DashboardScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { state, logout, getDailySales } = useApp();
-  const isAdmin = state.user?.role === 'admin';
+  const isSuperAdmin = state.user?.role === 'super_admin';
+  const isAdmin = state.user?.role === 'admin' || isSuperAdmin;
   const dailySales = getDailySales();
 
   const quickActions = isAdmin
@@ -136,14 +137,20 @@ export default function DashboardScreen() {
         </View>
 
         {/* Role Badge */}
-        <View style={[styles.roleBadge, isAdmin ? styles.adminBadge : styles.userBadge]}>
+        <View style={[
+          styles.roleBadge, 
+          isSuperAdmin ? styles.superAdminBadge : (isAdmin ? styles.adminBadge : styles.userBadge)
+        ]}>
           <Ionicons
-            name={isAdmin ? 'shield-checkmark' : 'person'}
+            name={isSuperAdmin ? 'shield-checkmark' : (isAdmin ? 'shield' : 'person')}
             size={14}
-            color={isAdmin ? colors.accent : colors.secondary}
+            color={isSuperAdmin ? colors.error : (isAdmin ? colors.accent : colors.secondary)}
           />
-          <Text style={[styles.roleText, isAdmin ? styles.adminText : styles.userText]}>
-            {isAdmin ? 'Administrator' : 'Staff Member'}
+          <Text style={[
+            styles.roleText, 
+            isSuperAdmin ? styles.superAdminText : (isAdmin ? styles.adminText : styles.userText)
+          ]}>
+            {isSuperAdmin ? 'Super Administrator' : (isAdmin ? 'Administrator' : 'Staff Member')}
           </Text>
         </View>
       </View>
@@ -301,6 +308,9 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
     marginTop: spacing.md,
   },
+  superAdminBadge: {
+    backgroundColor: colors.error + '20',
+  },
   adminBadge: {
     backgroundColor: colors.accent + '20',
   },
@@ -310,6 +320,9 @@ const styles = StyleSheet.create({
   roleText: {
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
+  },
+  superAdminText: {
+    color: colors.error,
   },
   adminText: {
     color: colors.accent,
