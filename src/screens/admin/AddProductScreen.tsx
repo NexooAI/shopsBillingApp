@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../theme';
 import { useApp } from '../../context/AppContext';
 import { RootStackParamList } from '../../navigation/AppNavigator';
+import { translateToTamil, smartTranslate } from '../../utils/translation';
 
 type AddProductRouteProp = RouteProp<RootStackParamList, 'AddProduct'>;
 
@@ -62,6 +63,16 @@ export default function AddProductScreen() {
       setProductCode(getNextProductCode());
     }
   }, []);
+
+  // Auto-translate English to Tamil when English name changes (only if Tamil is empty)
+  useEffect(() => {
+    if (nameEn && !nameTa) {
+      const translated = translateToTamil(nameEn);
+      if (translated && translated !== nameEn) {
+        setNameTa(translated);
+      }
+    }
+  }, [nameEn]);
 
   // Ensure product images directory exists
   const ensureImageDirectory = async () => {
@@ -305,14 +316,32 @@ export default function AddProductScreen() {
             onChangeText={setNameEn}
           />
 
-          <Text style={styles.inputLabel}>Name (Tamil)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="தமிழில் பெயர் உள்ளிடவும்"
-            placeholderTextColor={colors.gray[400]}
-            value={nameTa}
-            onChangeText={setNameTa}
-          />
+          <View style={styles.tamilInputRow}>
+            <View style={styles.tamilInputContainer}>
+              <Text style={styles.inputLabel}>Name (Tamil)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="தமிழில் பெயர் உள்ளிடவும்"
+                placeholderTextColor={colors.gray[400]}
+                value={nameTa}
+                onChangeText={setNameTa}
+              />
+            </View>
+            {nameEn && (
+              <TouchableOpacity
+                style={styles.translateButton}
+                onPress={() => {
+                  const translated = translateToTamil(nameEn);
+                  if (translated) {
+                    setNameTa(translated);
+                  }
+                }}
+              >
+                <Ionicons name="language" size={20} color={colors.white} />
+                <Text style={styles.translateButtonText}>Auto</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* Category Selection */}
@@ -622,6 +651,30 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginBottom: spacing.xs,
     marginTop: spacing.sm,
+  },
+  tamilInputRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'flex-end',
+  },
+  tamilInputContainer: {
+    flex: 1,
+  },
+  translateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.secondary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    minWidth: 70,
+  },
+  translateButtonText: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+    color: colors.white,
   },
   input: {
     backgroundColor: colors.gray[100],

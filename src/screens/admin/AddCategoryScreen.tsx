@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../theme';
 import { useApp } from '../../context/AppContext';
 import { RootStackParamList } from '../../navigation/AppNavigator';
+import { translateToTamil } from '../../utils/translation';
 
 type AddCategoryRouteProp = RouteProp<RootStackParamList, 'AddCategory'>;
 
@@ -45,7 +46,7 @@ export default function AddCategoryScreen() {
   const navigation = useNavigation();
   const route = useRoute<AddCategoryRouteProp>();
   const { addCategory, dispatch, state } = useApp();
-  
+
   const existingCategory = route.params?.category;
   const isEditing = !!existingCategory;
 
@@ -53,6 +54,16 @@ export default function AddCategoryScreen() {
   const [nameTa, setNameTa] = useState(existingCategory?.nameTa || '');
   const [selectedIcon, setSelectedIcon] = useState(existingCategory?.icon || 'basket');
   const [selectedColor, setSelectedColor] = useState(existingCategory?.color || '#e74c3c');
+
+  // Auto-translate English to Tamil when English name changes (only if Tamil is empty)
+  useEffect(() => {
+    if (nameEn && !nameTa && !isEditing) {
+      const translated = translateToTamil(nameEn);
+      if (translated && translated !== nameEn) {
+        setNameTa(translated);
+      }
+    }
+  }, [nameEn]);
 
   const handleSubmit = () => {
     if (!nameEn.trim()) {
@@ -92,7 +103,7 @@ export default function AddCategoryScreen() {
       {/* Category Names */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Category Details</Text>
-        
+
         <Text style={styles.inputLabel}>Name (English) *</Text>
         <TextInput
           style={styles.input}
@@ -102,14 +113,32 @@ export default function AddCategoryScreen() {
           onChangeText={setNameEn}
         />
 
-        <Text style={styles.inputLabel}>Name (Tamil)</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="தமிழில் பெயர் உள்ளிடவும்"
-          placeholderTextColor={colors.gray[400]}
-          value={nameTa}
-          onChangeText={setNameTa}
-        />
+        <View style={styles.tamilInputRow}>
+          <View style={styles.tamilInputContainer}>
+            <Text style={styles.inputLabel}>Name (Tamil)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="தமிழில் பெயர் உள்ளிடவும்"
+              placeholderTextColor={colors.gray[400]}
+              value={nameTa}
+              onChangeText={setNameTa}
+            />
+          </View>
+          {nameEn && (
+            <TouchableOpacity
+              style={styles.translateButton}
+              onPress={() => {
+                const translated = translateToTamil(nameEn);
+                if (translated) {
+                  setNameTa(translated);
+                }
+              }}
+            >
+              <Ionicons name="language" size={20} color={colors.white} />
+              <Text style={styles.translateButtonText}>Auto</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* Icon Selection */}
@@ -211,6 +240,30 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginBottom: spacing.xs,
     marginTop: spacing.sm,
+  },
+  tamilInputRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'flex-end',
+  },
+  tamilInputContainer: {
+    flex: 1,
+  },
+  translateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.secondary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    minWidth: 70,
+  },
+  translateButtonText: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+    color: colors.white,
   },
   input: {
     backgroundColor: colors.gray[100],
