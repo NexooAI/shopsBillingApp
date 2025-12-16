@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode, useState } from 'react';
-import { User, Category, Product, CartItem, Bill, AppState, UserRole } from '../types';
+import { User, Category, Product, CartItem, Bill, AppState, UserRole, ShopSettings } from '../types';
 import * as Database from '../services/sqliteDatabase';
 
 const initialState: AppState = {
@@ -10,11 +10,14 @@ const initialState: AppState = {
   cart: [],
   bills: [],
   users: [],
+  settings: null,
+  isSetupComplete: false,
 };
 
 type Action =
   | { type: 'LOGIN'; payload: User }
   | { type: 'LOGOUT' }
+  | { type: 'SET_SETTINGS'; payload: ShopSettings }
   | { type: 'ADD_CATEGORY'; payload: Category }
   | { type: 'UPDATE_CATEGORY'; payload: Category }
   | { type: 'DELETE_CATEGORY'; payload: string }
@@ -38,6 +41,8 @@ function appReducer(state: AppState, action: Action): AppState {
       return { ...state, user: action.payload, isAuthenticated: true };
     case 'LOGOUT':
       return { ...state, user: null, isAuthenticated: false, cart: [] };
+    case 'SET_SETTINGS':
+      return { ...state, settings: action.payload, isSetupComplete: action.payload.setupComplete };
     case 'ADD_CATEGORY':
       return { ...state, categories: [...state.categories, action.payload] };
     case 'UPDATE_CATEGORY':
@@ -131,6 +136,8 @@ interface AppContextType {
   dispatch: React.Dispatch<Action>;
   login: (username: string, password: string) => boolean;
   loginWithPhone: (phone: string, pin: string) => Promise<boolean>;
+  configureShop: (settings: Omit<ShopSettings, 'id' | 'createdAt' | 'setupComplete'>) => Promise<void>;
+  resetAppData: () => Promise<void>;
   logout: () => void;
   addCategory: (category: Omit<Category, 'id' | 'createdAt'>) => Promise<void>;
   updateCategory: (category: Category) => Promise<void>;
@@ -155,6 +162,8 @@ interface AppContextType {
   searchProducts: (query: string) => Promise<Product[]>;
   getProductByBarcode: (barcode: string) => Promise<Product | null>;
   getProductByCode: (code: string) => Promise<Product | null>;
+  settings: ShopSettings | null;
+  isSetupComplete: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -182,17 +191,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Load all data from SQLite database (optimized for large datasets)
   const loadDataFromDatabase = async () => {
     try {
-      const [categories, products, bills, users] = await Promise.all([
+      const [categories, products, bills, users, settings] = await Promise.all([
         Database.getAllCategories(),
         Database.getAllProducts(500), // Load first 500 products for initial view
         Database.getAllBills(100),    // Load last 100 bills
         Database.getAllUsers(),
+        Database.getSettings(),
       ]);
 
       dispatch({
         type: 'LOAD_STATE',
-        payload: { categories, products, bills, users },
+        payload: { categories, products, bills, users, settings: settings || null, isSetupComplete: Boolean(settings?.setupComplete) },
       });
+      if (settings) {
+        dispatch({ type: 'SET_SETTINGS', payload: { ...settings, setupComplete: settings.setupComplete } });
+      }
     } catch (error) {
       console.error('Error loading data from database:', error);
     }
@@ -228,6 +241,55 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Complete initial setup: save shop settings and create admin user
+  const configureShop = async (settingsInput: Omit<ShopSettings, 'id' | 'createdAt' | 'setupComplete'>) => {
+    const createdAt = new Date();
+    const settings: ShopSettings = {
+      id: 'default',
+      createdAt,
+      setupComplete: true,
+      ...settingsInput,
+    };
+
+    // Persist settings
+    await Database.upsertSettings(settings);
+    dispatch({ type: 'SET_SETTINGS', payload: settings });
+
+    // Ensure admin user exists with provided credentials
+    let adminUser = await Database.getUserByUsername(settings.adminUsername);
+    if (!adminUser) {
+      adminUser = {
+        id: `admin-${Date.now()}`,
+        username: settings.adminUsername,
+        phone: settings.phone,
+        role: 'admin',
+        pin: '0000',
+        createdAt,
+        createdBy: 'superadmin',
+      };
+      await Database.insertUser(adminUser);
+      dispatch({ type: 'ADD_USER', payload: adminUser });
+    }
+  };
+
+  // Reset all data but keep super admin; mark setup incomplete
+  const resetAppData = async () => {
+    await Database.resetAppData();
+    dispatch({
+      type: 'LOAD_STATE',
+      payload: {
+        user: null,
+        isAuthenticated: false,
+        categories: [],
+        products: [],
+        bills: [],
+        users: [],
+        settings: null,
+        isSetupComplete: false,
+      },
+    });
+  };
+
   // Refresh data from database
   const refreshData = async () => {
     await loadDataFromDatabase();
@@ -237,22 +299,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Find user by username
     const user = state.users.find(u => u.username === username);
 
-    // Super Admin login: superadmin/superadmin123
+    // If settings-defined admin credentials exist, respect them
+    if (state.settings && username === state.settings.adminUsername && password === state.settings.adminPassword && user) {
+      dispatch({ type: 'LOGIN', payload: user });
+      return true;
+    }
+
+    // Legacy/demo logins remain for existing seeded users
     if (username === 'superadmin' && password === 'superadmin123' && user) {
       dispatch({ type: 'LOGIN', payload: user });
       return true;
     }
-    // Admin login: admin/admin123
     if (username === 'admin' && password === 'admin123' && user) {
       dispatch({ type: 'LOGIN', payload: user });
       return true;
     }
-    // Staff/User login: user/user123
     if (username === 'user' && password === 'user123' && user) {
       dispatch({ type: 'LOGIN', payload: user });
       return true;
     }
-    // Check other users (password is same as username + 123 for demo)
     if (user && password === `${username}123`) {
       dispatch({ type: 'LOGIN', payload: user });
       return true;
@@ -508,11 +573,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         deleteUser,
         getProductsByCategory,
         getDailySales,
+        configureShop,
+        resetAppData,
         isLoading,
         refreshData,
         searchProducts,
         getProductByBarcode,
         getProductByCode,
+        settings: state.settings,
+        isSetupComplete: state.isSetupComplete,
       }}
     >
       {children}

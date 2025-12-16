@@ -9,6 +9,7 @@ import { colors } from '../theme';
 // Auth Screens
 import LoginScreen from '../screens/auth/LoginScreen';
 import OTPScreen from '../screens/auth/OTPScreen';
+import InitialSetupScreen from '../screens/setup/InitialSetupScreen';
 
 // Main Screens
 import DashboardScreen from '../screens/main/DashboardScreen';
@@ -35,6 +36,7 @@ export type RootStackParamList = {
   Main: undefined;
   Login: undefined;
   OTP: { phone: string };
+  InitialSetup: undefined;
   CategoryManagement: undefined;
   ProductManagement: undefined;
   UserManagement: undefined;
@@ -143,7 +145,15 @@ export default function AppNavigator() {
           },
         }}
       >
-        {!state.isAuthenticated ? (
+        {!state.isSetupComplete ? (
+          <>
+            <Stack.Screen
+              name="InitialSetup"
+              component={InitialSetupScreen}
+              options={{ headerShown: false }}
+            />
+          </>
+        ) : !state.isAuthenticated ? (
           <>
             <Stack.Screen
               name="Login"

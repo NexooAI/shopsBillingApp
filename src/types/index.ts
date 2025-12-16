@@ -59,6 +59,18 @@ export interface DailySales {
   bills: Bill[];
 }
 
+export interface ShopSettings {
+  id: string;
+  shopName: string;
+  address: string;
+  phone: string;
+  logoUri?: string;
+  adminUsername: string;
+  adminPassword: string;
+  setupComplete: boolean;
+  createdAt: Date;
+}
+
 export interface AppState {
   user: User | null;
   isAuthenticated: boolean;
@@ -67,6 +79,8 @@ export interface AppState {
   cart: CartItem[];
   bills: Bill[];
   users: User[];
+  settings: ShopSettings | null;
+  isSetupComplete: boolean;
 }
 
 export type LoginMethod = 'phone' | 'username';

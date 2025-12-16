@@ -22,7 +22,9 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function LoginScreen() {
   const navigation = useNavigation<NavigationProp>();
-  const { login, loginWithPhone } = useApp();
+  const { login, loginWithPhone, state } = useApp();
+  const shopName = state.settings?.shopName || 'ShopBill Pro';
+  const logoUri = state.settings?.logoUri;
 
   const [loginMethod, setLoginMethod] = useState<'phone' | 'username'>('username');
   const [username, setUsername] = useState('');
@@ -86,9 +88,13 @@ export default function LoginScreen() {
         {/* Header with gradient effect */}
         <View style={styles.header}>
           <View style={styles.logoContainer}>
-            <Ionicons name="storefront" size={64} color={colors.accent} />
+            {logoUri ? (
+              <Image source={{ uri: logoUri }} style={styles.logoImage} />
+            ) : (
+              <Ionicons name="storefront" size={64} color={colors.accent} />
+            )}
           </View>
-          <Text style={styles.appName}>ShopBill Pro</Text>
+          <Text style={styles.appName}>{shopName}</Text>
           <Text style={styles.tagline}>Smart Billing Made Simple</Text>
         </View>
 

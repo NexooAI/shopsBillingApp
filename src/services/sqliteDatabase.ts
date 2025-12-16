@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import { User, Category, Product, Bill, CartItem, UserRole } from '../types';
+import { User, Category, Product, Bill, CartItem, UserRole, ShopSettings } from '../types';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
@@ -93,6 +93,15 @@ export const initDatabase = async (): Promise<void> => {
         CREATE INDEX IF NOT EXISTS idx_bills_createdBy ON bills(createdBy);
     `);
 
+    // Create Settings table (single row)
+    await database.execAsync(`
+        CREATE TABLE IF NOT EXISTS settings (
+            id TEXT PRIMARY KEY,
+            data TEXT NOT NULL,
+            createdAt TEXT NOT NULL
+        );
+    `);
+
     // Insert demo data if empty
     const userCount = await database.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM users');
     if (userCount?.count === 0) {
@@ -162,6 +171,33 @@ const insertDemoData = async (database: SQLite.SQLiteDatabase): Promise<void> =>
     console.log('Demo data inserted successfully');
 };
 
+// ============ SETTINGS ============
+
+export const getSettings = async (): Promise<ShopSettings | null> => {
+    const database = await getDatabase();
+    const row = await database.getFirstAsync<any>('SELECT * FROM settings WHERE id = ?', ['default']);
+    if (!row) return null;
+    const data = JSON.parse(row.data) as Omit<ShopSettings, 'createdAt'>;
+    return {
+        ...data,
+        createdAt: new Date(row.createdAt),
+    };
+};
+
+export const upsertSettings = async (settings: ShopSettings): Promise<void> => {
+    const database = await getDatabase();
+    await database.runAsync(
+        `INSERT INTO settings (id, data, createdAt)
+         VALUES (?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET data = excluded.data, createdAt = excluded.createdAt`,
+        [
+            'default',
+            JSON.stringify({ ...settings, createdAt: undefined }),
+            settings.createdAt.toISOString(),
+        ]
+    );
+};
+
 // ============ USERS ============
 
 export const getAllUsers = async (): Promise<User[]> => {
@@ -172,6 +208,17 @@ export const getAllUsers = async (): Promise<User[]> => {
         role: row.role as UserRole,
         createdAt: new Date(row.createdAt),
     }));
+};
+
+export const getUserByUsername = async (username: string): Promise<User | null> => {
+    const database = await getDatabase();
+    const row = await database.getFirstAsync<any>('SELECT * FROM users WHERE username = ?', [username]);
+    if (!row) return null;
+    return {
+        ...row,
+        role: row.role as UserRole,
+        createdAt: new Date(row.createdAt),
+    };
 };
 
 export const insertUser = async (user: User): Promise<void> => {
@@ -476,6 +523,7 @@ export const clearAllData = async (): Promise<void> => {
         DELETE FROM products;
         DELETE FROM categories;
         DELETE FROM users;
+        DELETE FROM settings;
     `);
 };
 
@@ -484,6 +532,27 @@ export const closeDatabase = async (): Promise<void> => {
         await db.closeAsync();
         db = null;
     }
+};
+
+// Reset everything but recreate the permanent super admin user
+export const resetAppData = async (): Promise<void> => {
+    const database = await getDatabase();
+    const now = new Date().toISOString();
+
+    await database.withTransactionAsync(async () => {
+        await database.execAsync(`
+            DELETE FROM bills;
+            DELETE FROM products;
+            DELETE FROM categories;
+            DELETE FROM users;
+            DELETE FROM settings;
+        `);
+
+        await database.runAsync(
+            `INSERT INTO users (id, username, phone, role, pin, createdAt) VALUES (?, ?, ?, ?, ?, ?)`,
+            ['superadmin', 'superadmin', '9999999999', 'super_admin', '0000', now]
+        );
+    });
 };
 
 // Get database statistics
