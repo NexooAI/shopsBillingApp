@@ -12,6 +12,9 @@ import { useRoute, RouteProp, useNavigation } from '@react-navigation/native';
 import { colors, spacing, borderRadius, fontSize, fontWeight, shadows } from '../../theme';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import { Bill } from '../../types';
+import * as Print from 'expo-print';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import PrinterService from '../../services/PrinterService';
 
 type BillPreviewRouteProp = RouteProp<RootStackParamList, 'BillPreview'>;
 
@@ -41,22 +44,71 @@ export default function BillPreviewScreen() {
   const handlePrint = async () => {
     setIsPrinting(true);
     
-    // Simulate printing delay
-    setTimeout(() => {
+    try {
+      // 1. Check selected printer preference
+      const savedPrinter = await AsyncStorage.getItem('selected_printer');
+      let printerType = 'system';
+      let printerAddress = '';
+      
+      if (savedPrinter) {
+        const p = JSON.parse(savedPrinter);
+        printerType = p.type;
+        printerAddress = p.address;
+      }
+      
+      if (printerType === 'bluetooth' && printerAddress) {
+        // 2. Bluetooth Printing
+        await PrinterService.connect({ 
+           inner_mac_address: printerAddress, 
+           device_name: 'Printer' // Name doesn't matter for connection usually, but good practice
+        });
+        await PrinterService.printBillObject(bill);
+        Alert.alert('Success', 'Sent to Bluetooth Printer');
+        
+      } else {
+        // 3. System Printing (Default)
+        // Create simple HTML for system print
+        const html = `
+          <html>
+            <head>
+              <style>
+                body { font-family: Helvetica, sans-serif; padding: 20px; }
+                .header { text-align: center; margin-bottom: 20px; }
+                .row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+                .bold { font-weight: bold; }
+                .divider { border-top: 1px dashed #000; margin: 10px 0; }
+              </style>
+            </head>
+            <body>
+              <div class="header">
+                <h1>ShopBill Pro</h1>
+                <p>123 Main Street, City</p>
+              </div>
+              <div class="divider"></div>
+              <div class="row"><span>Bill No:</span><span>#${bill.id.slice(-6)}</span></div>
+              <div class="row"><span>Date:</span><span>${new Date(bill.createdAt).toLocaleDateString()}</span></div>
+              <div class="divider"></div>
+              ${bill.items.map(item => `
+                <div class="row">
+                  <span style="flex:2">${item.product.nameEn} x${item.quantity}</span>
+                  <span style="flex:1; text-align:right">${(item.quantity * item.product.price).toFixed(2)}</span>
+                </div>
+              `).join('')}
+              <div class="divider"></div>
+              <div class="row bold"><span>Total</span><span>₹${bill.total.toFixed(2)}</span></div>
+              <div class="header" style="margin-top:20px"><p>Thank You!</p></div>
+            </body>
+          </html>
+        `;
+        
+        await Print.printAsync({ html });
+      }
+      
+    } catch (error: any) {
+      Alert.alert('Print Error', error.message || 'Failed to print');
+    } finally {
       setIsPrinting(false);
-      Alert.alert(
-        'Print Bill',
-        'In production, this would connect to a Bluetooth thermal printer.\n\n' +
-          'The bill would include:\n' +
-          '• Shop logo and details\n' +
-          '• Bill number and date\n' +
-          '• Item-wise breakdown\n' +
-          '• GST details\n' +
-          '• Total amount\n' +
-          '• Thank you message',
-        [{ text: 'OK' }]
-      );
-    }, 1500);
+    }
   };
 
   const handleShare = () => {

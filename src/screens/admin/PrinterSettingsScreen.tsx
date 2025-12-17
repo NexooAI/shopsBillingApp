@@ -9,11 +9,13 @@ import {
     ActivityIndicator,
     Platform,
     Linking,
+    PermissionsAndroid,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, borderRadius, fontSize, fontWeight, shadows } from '../../theme';
+import PrinterService, { PrinterDevice } from '../../services/PrinterService';
 
 interface PrinterInfo {
     id: string;
@@ -34,6 +36,33 @@ export default function PrinterSettingsScreen() {
     useEffect(() => {
         checkPrintAvailability();
         loadSelectedPrinter();
+        
+        // Auto-connect if printer saved
+        const restoreConnection = async () => {
+             const saved = await AsyncStorage.getItem(PRINTER_STORAGE_KEY);
+             if(saved) {
+                 const p = JSON.parse(saved);
+                 if (p.type === 'bluetooth' && p.address) {
+                     try {
+                        console.log('Attempting auto-connect to', p.name);
+                        await PrinterService.connect({ 
+                            inner_mac_address: p.address, 
+                            device_name: p.name 
+                        });
+                        // Update UI to show connected
+                        setSelectedPrinter({...p, isConnected: true});
+                     } catch (e) {
+                         console.log('Auto-connect failed', e);
+                         setSelectedPrinter({...p, isConnected: false});
+                     }
+                 }
+             }
+        };
+        restoreConnection();
+
+        return () => {
+            PrinterService.disconnect();
+        }
     }, []);
 
     const loadSelectedPrinter = async () => {
@@ -49,9 +78,28 @@ export default function PrinterSettingsScreen() {
 
     const saveSelectedPrinter = async (printer: PrinterInfo) => {
         try {
-            await AsyncStorage.setItem(PRINTER_STORAGE_KEY, JSON.stringify(printer));
-            setSelectedPrinter(printer);
-            Alert.alert('Success', `${printer.name} selected as default printer`);
+            if (printer.type === 'bluetooth' && printer.address) {
+                setIsChecking(true);
+                try {
+                    await PrinterService.connect({
+                        inner_mac_address: printer.address,
+                        device_name: printer.name
+                    });
+                    const connectedPrinter = { ...printer, isConnected: true };
+                    await AsyncStorage.setItem(PRINTER_STORAGE_KEY, JSON.stringify(connectedPrinter));
+                    setSelectedPrinter(connectedPrinter);
+                    Alert.alert('Success', `Connected to ${printer.name}`);
+                } catch (err: any) {
+                     Alert.alert('Connection Failed', err.message || 'Could not connect to printer');
+                } finally {
+                    setIsChecking(false);
+                }
+            } else {
+                // System printer or others
+                await AsyncStorage.setItem(PRINTER_STORAGE_KEY, JSON.stringify(printer));
+                setSelectedPrinter(printer);
+                Alert.alert('Success', `${printer.name} selected as default`);
+            }
         } catch (error) {
             console.log('Error saving printer settings:', error);
         }
@@ -59,26 +107,16 @@ export default function PrinterSettingsScreen() {
 
     const checkPrintAvailability = async () => {
         setIsChecking(true);
-
         try {
-            // Check system print availability
             const printAvailable = await Print.printAsync !== undefined;
             setSystemPrintAvailable(printAvailable);
-
-            const detectedPrinters: PrinterInfo[] = [];
-
-            // Add system print option (always available on most devices)
-            detectedPrinters.push({
+            // Initialize the list with System Printer
+             setPrinters([{
                 id: 'system',
                 name: 'System Print Dialog',
                 type: 'system',
                 isConnected: true,
-            });
-
-            // Simulate checking for printers
-            // In a real app, you would use native modules for Bluetooth/USB printer discovery
-
-            setPrinters(detectedPrinters);
+            }]);
         } catch (error) {
             console.log('Error checking print availability:', error);
         } finally {
@@ -86,98 +124,80 @@ export default function PrinterSettingsScreen() {
         }
     };
 
+    const requestPermissions = async () => {
+        if (Platform.OS !== 'android') return true;
+
+        if (Platform.Version >= 31) {
+            const result = await PermissionsAndroid.requestMultiple([
+                PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+                PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+            ]);
+            return (
+                result['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED &&
+                result['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED
+            );
+        } else {
+            const granted = await PermissionsAndroid.request(
+                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+            );
+            return granted === PermissionsAndroid.RESULTS.GRANTED;
+        }
+    };
+
     const scanForPrinters = async () => {
         setIsChecking(true);
-
-        Alert.alert(
-            'Printer Discovery',
-            'For Bluetooth printers:\n\n1. Enable Bluetooth on your device\n2. Pair the printer in device settings first\n3. Then it will appear here\n\nFor USB printers:\n\n1. Connect via OTG cable\n2. Grant USB permissions when prompted',
-            [
-                {
-                    text: 'Open Bluetooth Settings',
-                    onPress: () => {
-                        if (Platform.OS === 'android') {
-                            Linking.sendIntent('android.settings.BLUETOOTH_SETTINGS');
-                        } else {
-                            Linking.openURL('App-Prefs:Bluetooth');
-                        }
-                    },
-                },
-                { text: 'OK', style: 'cancel' },
-            ]
-        );
-
-        // Simulate scanning delay
-        setTimeout(() => {
+        
+        const hasPermissions = await requestPermissions();
+        if (!hasPermissions) {
+            Alert.alert('Permission Denied', 'Bluetooth permissions are required to scan for printers.');
             setIsChecking(false);
+            return;
+        }
 
-            // Add mock printers for demonstration
-            // In production, these would come from actual Bluetooth/USB scanning
-            const mockPrinters: PrinterInfo[] = [
-                {
-                    id: 'system',
-                    name: 'System Print Dialog',
-                    type: 'system',
-                    isConnected: true,
-                },
-            ];
+        try {
+            const devices = await PrinterService.scan();
+            const formattedDevices: PrinterInfo[] = devices.map(d => ({
+                id: d.inner_mac_address,
+                name: d.device_name,
+                type: 'bluetooth',
+                address: d.inner_mac_address,
+                isConnected: false // Will be updated if matches selected
+            }));
 
-            // Check if any Bluetooth devices are paired (would need native module)
-            // For now, show instruction to pair manually
+            // Merge with system printer
+            setPrinters(prev => {
+                const system = prev.find(p => p.type === 'system');
+                return system ? [system, ...formattedDevices] : formattedDevices;
+            });
 
-            setPrinters(mockPrinters);
-        }, 2000);
+        } catch (error: any) {
+             Alert.alert('Scan Failed', error.message || 'Could not scan for devices');
+        } finally {
+            setIsChecking(false);
+        }
     };
 
     const testPrint = async (printer: PrinterInfo) => {
         try {
-            const testHtml = `
-        <html>
-          <head>
-            <style>
-              body { 
-                font-family: 'Courier New', monospace; 
-                padding: 20px;
-                text-align: center;
-              }
-              h1 { font-size: 24px; margin-bottom: 10px; }
-              p { font-size: 14px; margin: 5px 0; }
-              .line { border-top: 1px dashed #000; margin: 15px 0; }
-              .success { color: green; font-size: 18px; }
-            </style>
-          </head>
-          <body>
-            <h1>🖨️ TEST PRINT</h1>
-            <div class="line"></div>
-            <p><strong>Shop Billing App</strong></p>
-            <p>Printer: ${printer.name}</p>
-            <p>Type: ${printer.type.toUpperCase()}</p>
-            <p>Date: ${new Date().toLocaleString()}</p>
-            <div class="line"></div>
-            <p class="success">✓ Printer Connected Successfully!</p>
-            <div class="line"></div>
-            <p>This is a test print to verify</p>
-            <p>your printer connection.</p>
-          </body>
-        </html>
-      `;
-
             if (printer.type === 'system') {
-                await Print.printAsync({
-                    html: testHtml,
-                });
-                Alert.alert('Success', 'Test print sent successfully!');
-            } else {
-                // For Bluetooth/USB printers, would use specific library
-                Alert.alert(
-                    'Bluetooth/USB Printing',
-                    'For thermal receipt printers, you need to install additional libraries:\n\n• react-native-bluetooth-escpos-printer\n• react-native-thermal-receipt-printer\n\nThese require a development build (not Expo Go).'
-                );
+                const testHtml = `
+                    <html>
+                        <head><style>body { font-size: 24px; text-align: center; }</style></head>
+                        <body><h1>Test Print</h1><p>System Print Works!</p></body>
+                    </html>
+                `;
+                await Print.printAsync({ html: testHtml });
+            } else if (printer.type === 'bluetooth') {
+                await PrinterService.printTestReceipt();
+                Alert.alert('Sent', 'Test print sent to printer');
             }
         } catch (error: any) {
             Alert.alert('Print Error', error.message || 'Failed to print');
         }
     };
+
+
 
     const getPrinterIcon = (type: string) => {
         switch (type) {
