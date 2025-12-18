@@ -15,12 +15,21 @@ import { Bill } from '../../types';
 import * as Print from 'expo-print';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import PrinterService from '../../services/PrinterService';
+import { useApp } from '../../context/AppContext';
 
 type BillPreviewRouteProp = RouteProp<RootStackParamList, 'BillPreview'>;
 
 export default function BillPreviewScreen() {
   const route = useRoute<BillPreviewRouteProp>();
   const navigation = useNavigation();
+  const { state } = useApp();
+  const shopName = state.settings?.shopName || 'ShopBill Pro';
+  const shopAddress = state.settings?.address || '123 Main Street, City';
+  const shopPhone = state.settings?.phone || '+91 98765 43210';
+  const logoUri = state.settings?.logoUri;
+  
+
+  
   const bill: Bill = route.params.bill;
   const [isPrinting, setIsPrinting] = useState(false);
 
@@ -60,43 +69,116 @@ export default function BillPreviewScreen() {
         // 2. Bluetooth Printing
         await PrinterService.connect({ 
            inner_mac_address: printerAddress, 
-           device_name: 'Printer' // Name doesn't matter for connection usually, but good practice
+           device_name: 'Printer',
+           device_type: printerType === 'bluetooth' ? 'bluetooth' : (printerType === 'net' ? 'net' : 'usb')
         });
-        await PrinterService.printBillObject(bill);
+        
+        // 2. Bluetooth Printing (Text Mode)
+        await PrinterService.printBillObject(bill, state.settings);
         Alert.alert('Success', 'Sent to Bluetooth Printer');
         
       } else {
         // 3. System Printing (Default)
-        // Create simple HTML for system print
         const html = `
           <html>
             <head>
               <style>
-                body { font-family: Helvetica, sans-serif; padding: 20px; }
-                .header { text-align: center; margin-bottom: 20px; }
-                .row { display: flex; justify-content: space-between; margin-bottom: 5px; }
-                .bold { font-weight: bold; }
-                .divider { border-top: 1px dashed #000; margin: 10px 0; }
+                @page { margin: 0; }
+                body { font-family: 'Courier New', monospace; padding: 10px; color: #000; margin: 0; width: 100%; max-width: 100%; box-sizing: border-box; }
+                .header { text-align: center; margin-bottom: 5px; }
+                .shop-name { font-size: 16px; font-weight: bold; margin: 0; text-transform: uppercase; }
+                .shop-details { font-size: 10px; margin: 2px 0; }
+                .divider { border-top: 1px dashed #000; margin: 5px 0; display: block; width: 100%; }
+                .row { display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 2px; }
+                .label { font-weight: normal; }
+                .value { font-weight: bold; }
+                
+                table { width: 100%; border-collapse: collapse; margin: 5px 0; table-layout: fixed; }
+                th { border-bottom: 1px dashed #000; padding: 2px 0; font-weight: bold; text-transform: uppercase; white-space: nowrap; }
+                td { padding: 2px 0; font-size: 10px; vertical-align: top; }
+                .text-right { text-align: right; }
+                .text-center { text-align: center; }
+                
+                .totals { margin-top: 5px; border-top: 1px dashed #000; padding-top: 5px; }
+                .total-row { display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 2px; }
+                .grand-total { border-top: 1px solid #000; margin-top: 5px; padding-top: 5px; font-size: 14px; font-weight: bold; }
+                
+                .gst-box { margin: 5px 0; padding: 5px 0; border-top: 1px dashed #000; border-bottom: 1px dashed #000; }
+                .gst-title { font-size: 9px; font-weight: bold; margin-bottom: 2px; }
+                .footer { text-align: center; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #000; }
+                .footer p { margin: 2px 0; font-size: 10px; }
+                .thank-you { font-weight: bold; font-size: 12px; margin-bottom: 5px; }
               </style>
             </head>
             <body>
               <div class="header">
-                <h1>ShopBill Pro</h1>
-                <p>123 Main Street, City</p>
-              </div>
-              <div class="divider"></div>
-              <div class="row"><span>Bill No:</span><span>#${bill.id.slice(-6)}</span></div>
-              <div class="row"><span>Date:</span><span>${new Date(bill.createdAt).toLocaleDateString()}</span></div>
-              <div class="divider"></div>
-              ${bill.items.map(item => `
-                <div class="row">
-                  <span style="flex:2">${item.product.nameEn} x${item.quantity}</span>
-                  <span style="flex:1; text-align:right">${(item.quantity * item.product.price).toFixed(2)}</span>
+                <div style="display: flex; justify-content: center; margin-bottom: 10px;">
+                  <div style="width: 40px; height: 40px; background-color: #000; border-radius: 20px; display: flex; align-items: center; justify-content: center;">
+                    ${logoUri 
+                      ? `<img src="${logoUri}" style="width: 40px; height: 40px; border-radius: 20px; object-fit: cover;" />`
+                      : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="20" height="20" fill="#fff">
+                          <path d="M448 128h-32V80c0-26.51-21.49-48-48-48H144c-26.51 0-48 21.49-48 48v48H64c-35.35 0-64 28.65-64 64v48c0 35.35 28.65 64 64 64h16.15c20.35 0 38.64-12.01 46.64-30.63C134.8 290.4 153.1 304 176 304s41.21-13.6 49.21-30.63c8 18.62 26.29 30.63 46.79 30.63s38.79-12.01 46.79-30.63c8 18.62 26.29 30.63 46.79 30.63s38.79-12.01 46.79-30.63c8 18.62 26.29 30.63 46.79 30.63h16.15c35.35 0 64-28.65 64-64v-48c0-35.35-28.65-64-64-64zM128 128H384V80c0-8.82-7.18-16-16-16H144c-8.82 0-16 7.18-16 16v48zM64 256c-8.82 0-16-7.18-16-16v-48c0-8.82 7.18-16 16-16h32v80H64zm112 0c-8.82 0-16-7.18-16-16v-64h32v64c0 8.82-7.18 16-16 16zm112 0c-8.82 0-16-7.18-16-16v-64h32v64c0 8.82-7.18 16-16 16zm112 0c-8.82 0-16-7.18-16-16v-64h32v64c0 8.82-7.18 16-16 16zM464 240c0 8.82-7.18 16-16 16h-32v-80h32c8.82 0 16 7.18 16 16v48z"/>
+                         </svg>`
+                    }
+                  </div>
                 </div>
-              `).join('')}
+                <h1 class="shop-name">${shopName}</h1>
+                <p class="shop-details">${shopAddress}</p>
+                <p class="shop-details">📞 ${shopPhone}</p>
+                <p class="shop-details" style="font-size: 10px; margin-top: 5px">GSTIN: 33ABCDE1234F1Z5</p>
+              </div>
+              
               <div class="divider"></div>
-              <div class="row bold"><span>Total</span><span>₹${bill.total.toFixed(2)}</span></div>
-              <div class="header" style="margin-top:20px"><p>Thank You!</p></div>
+              
+              <div class="row"><span class="label">Bill No:</span><span class="value">#${bill.id.slice(-6)}</span></div>
+              <div class="row"><span class="label">Date:</span><span class="value">${formatDate(bill.createdAt)}</span></div>
+              <div class="row"><span class="label">Time:</span><span class="value">${formatTime(bill.createdAt)}</span></div>
+              
+              <div class="divider"></div>
+              
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width: 45%; font-size: 10px; text-align: left;">Item</th>
+                    <th style="width: 15%; font-size: 10px; text-align: center;">Qty</th>
+                    <th style="width: 20%; font-size: 10px; text-align: right;">Rate</th>
+                    <th style="width: 20%; font-size: 10px; text-align: right;">Amt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${bill.items.map(item => `
+                    <tr>
+                      <td>
+                        <div style="font-weight: 500">${item.product.nameEn}</div>
+                        <div style="font-size: 10px; color: #9e9e9e">${item.product.nameTa || ''}</div>
+                      </td>
+                      <td class="text-center">${item.quantity}</td>
+                      <td class="text-right">₹${item.product.price}</td>
+                      <td class="text-right">₹${(item.quantity * item.product.price).toFixed(2)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+              
+              <div class="divider"></div>
+              
+              <div class="totals">
+                <div class="total-row"><span>Subtotal</span><span>₹${bill.subtotal.toFixed(2)}</span></div>
+                <div class="total-row"><span>GST</span><span>₹${bill.gstAmount.toFixed(2)}</span></div>
+                <div class="total-row grand-total"><span>Total</span><span>₹${bill.total.toFixed(2)}</span></div>
+              </div>
+              
+              <div class="gst-box">
+                <div class="gst-title">GST Breakdown</div>
+                <div class="row"><span style="font-size: 10px">CGST (2.5%)</span><span style="font-size: 10px">₹${(bill.gstAmount / 2).toFixed(2)}</span></div>
+                <div class="row"><span style="font-size: 10px">SGST (2.5%)</span><span style="font-size: 10px">₹${(bill.gstAmount / 2).toFixed(2)}</span></div>
+              </div>
+              
+              <div class="footer">
+                <p class="thank-you">Thank You!</p>
+                <p class="shop-details">Please visit again</p>
+                <p style="font-size: 10px; color: #bdbdbd; margin-top: 10px">Powered by ShopBill Pro</p>
+              </div>
             </body>
           </html>
         `;
@@ -125,9 +207,9 @@ export default function BillPreviewScreen() {
             <View style={styles.logoPlaceholder}>
               <Ionicons name="storefront" size={40} color={colors.primary} />
             </View>
-            <Text style={styles.shopName}>ShopBill Pro</Text>
-            <Text style={styles.shopAddress}>123 Main Street, City</Text>
-            <Text style={styles.shopPhone}>📞 +91 98765 43210</Text>
+            <Text style={styles.shopName}>{shopName}</Text>
+            <Text style={styles.shopAddress}>{shopAddress}</Text>
+            <Text style={styles.shopPhone}>📞 {shopPhone}</Text>
             <Text style={styles.gstinText}>GSTIN: 33ABCDE1234F1Z5</Text>
           </View>
 
@@ -289,6 +371,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     color: colors.text.secondary,
     marginTop: 2,
+    textAlign: 'center',
   },
   shopPhone: {
     fontSize: fontSize.sm,
@@ -488,4 +571,3 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
 });
-

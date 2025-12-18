@@ -71,9 +71,31 @@ export default function InitialSetupScreen() {
         ]);
     };
 
+    const handleCancel = async () => {
+        setIsSaving(true);
+        try {
+            await configureShop({
+                shopName: 'Demo Shop',
+                address: '123 Demo Street, City',
+                phone: '9999999999',
+                logoUri: undefined,
+                adminUsername: 'admin',
+                adminPassword: 'admin123',
+            });
+            Alert.alert('Demo Setup', 'App configured with demo credentials.\n\nUsername: admin\nPassword: admin123', [
+                { text: 'OK', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] }) },
+            ]);
+        } catch (error) {
+            console.error('Error in default setup:', error);
+            Alert.alert('Error', 'Failed to configure demo setup.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     return (
         <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-            <Text style={styles.title}>Initial Setup</Text>
+            <Text style={styles.title}>Well Come Billing Application</Text>
             <Text style={styles.subtitle}>Enter your shop details and admin credentials</Text>
 
             <Text style={styles.label}>Shop Name *</Text>
@@ -143,11 +165,12 @@ export default function InitialSetupScreen() {
             />
 
             <View style={styles.buttonRow}>
-                <TouchableOpacity style={[styles.secondaryButton, isSaving && styles.disabled]} disabled={isSaving} onPress={handleSave}>
-                    <Text style={styles.secondaryButtonText}>{isSaving ? 'Saving...' : 'Save'}</Text>
-                </TouchableOpacity>
                 <TouchableOpacity style={[styles.saveButton, isSaving && styles.disabled]} disabled={isSaving} onPress={handleSaveAndRestart}>
                     <Text style={styles.saveButtonText}>{isSaving ? 'Saving...' : 'Save & Restart'}</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity style={[styles.cancelButton, isSaving && styles.disabled]} disabled={isSaving} onPress={handleCancel}>
+                    <Text style={styles.cancelButtonText}>Cancel (Use Demo Defaults)</Text>
                 </TouchableOpacity>
             </View>
         </ScrollView>
@@ -159,17 +182,21 @@ const styles = StyleSheet.create({
         padding: spacing.lg,
         backgroundColor: colors.background,
         flexGrow: 1,
+        justifyContent: 'center',
     },
     title: {
-        fontSize: fontSize.xl,
+        fontSize: fontSize.xxl,
         fontWeight: fontWeight.bold,
         color: colors.text.primary,
+        textAlign: 'center',
+        marginBottom: spacing.md,
     },
     subtitle: {
         fontSize: fontSize.sm,
         color: colors.text.secondary,
         marginTop: spacing.xs,
-        marginBottom: spacing.lg,
+        marginBottom: spacing.xl,
+        textAlign: 'center',
     },
     label: {
         fontSize: fontSize.sm,
@@ -230,11 +257,23 @@ const styles = StyleSheet.create({
         paddingVertical: spacing.md,
         borderRadius: borderRadius.lg,
         alignItems: 'center',
+        width: '100%',
     },
     saveButtonText: {
         fontSize: fontSize.lg,
         fontWeight: fontWeight.bold,
         color: colors.primary,
+    },
+    cancelButton: {
+        marginTop: spacing.md,
+        paddingVertical: spacing.md,
+        alignItems: 'center',
+        width: '100%',
+    },
+    cancelButtonText: {
+        fontSize: fontSize.md,
+        color: colors.text.secondary,
+        textDecorationLine: 'underline',
     },
     secondaryButton: {
         flex: 1,
@@ -250,8 +289,8 @@ const styles = StyleSheet.create({
         color: colors.text.primary,
     },
     buttonRow: {
-        flexDirection: 'row',
-        gap: spacing.md,
+        marginTop: spacing.md,
+        width: '100%',
     },
     disabled: {
         opacity: 0.7,

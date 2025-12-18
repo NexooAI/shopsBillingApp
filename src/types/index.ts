@@ -68,6 +68,7 @@ export interface ShopSettings {
   adminUsername: string;
   adminPassword: string;
   setupComplete: boolean;
+  printerWidth?: 58 | 80; // Default 58
   createdAt: Date;
 }
 
