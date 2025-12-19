@@ -184,6 +184,17 @@ export default function SalesSummaryScreen() {
         </View>
       </View>
 
+      {/* Product Breakdown Link */}
+      <View style={{ paddingHorizontal: spacing.lg, marginBottom: spacing.md }}>
+        <TouchableOpacity
+          style={styles.breakdownButton}
+          onPress={() => navigation.navigate('ProductSalesStats')}
+        >
+          <Text style={styles.breakdownButtonText}>View Product Breakdown</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+        </TouchableOpacity>
+      </View>
+
       {/* GST Summary */}
       <View style={styles.gstSection}>
         <Text style={styles.sectionTitle}>Tax Summary</Text>
@@ -459,6 +470,21 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: spacing.xxl,
+  },
+  breakdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.white,
+    padding: spacing.md,
+    borderRadius: borderRadius.lg,
+    ...shadows.small,
+  },
+  breakdownButtonText: {
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
+    color: colors.primary,
+    marginRight: spacing.sm,
   },
 });
 

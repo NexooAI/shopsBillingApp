@@ -16,6 +16,8 @@ import DashboardScreen from '../screens/main/DashboardScreen';
 import ProductsScreen from '../screens/main/ProductsScreen';
 import BillingScreen from '../screens/main/BillingScreen';
 import SalesSummaryScreen from '../screens/main/SalesSummaryScreen';
+import ProductSalesStatsScreen from '../screens/main/ProductSalesStatsScreen';
+import InventoryStatusScreen from '../screens/main/InventoryStatusScreen';
 
 // Admin Screens
 import CategoryManagementScreen from '../screens/admin/CategoryManagementScreen';
@@ -47,6 +49,9 @@ export type RootStackParamList = {
   ServerSync: undefined;
   PrinterSettings: undefined;
   BillPreview: { bill: any };
+  SalesSummary: undefined;
+  ProductSalesStats: undefined;
+  InventoryStatus: undefined;
 };
 
 export type MainTabParamList = {
@@ -222,6 +227,16 @@ export default function AppNavigator() {
               name="BillPreview"
               component={BillPreviewScreen}
               options={{ title: 'Bill' }}
+            />
+            <Stack.Screen
+              name="ProductSalesStats"
+              component={ProductSalesStatsScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="InventoryStatus"
+              component={InventoryStatusScreen}
+              options={{ headerShown: false }}
             />
           </>
         )}

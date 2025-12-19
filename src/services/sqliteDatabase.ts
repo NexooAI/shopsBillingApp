@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import { User, Category, Product, Bill, CartItem, UserRole, ShopSettings } from '../types';
+import { User, Category, Product, Bill, CartItem, UserRole, ShopSettings, ProductSalesStat } from '../types';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
@@ -477,10 +477,24 @@ export const getAllBills = async (limit?: number, offset?: number): Promise<Bill
 
 export const insertBill = async (bill: Bill): Promise<void> => {
     const database = await getDatabase();
-    await database.runAsync(
-        `INSERT INTO bills (id, items, subtotal, gstAmount, total, customerId, createdAt, createdBy) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [bill.id, JSON.stringify(bill.items), bill.subtotal, bill.gstAmount, bill.total, bill.customerId || null, bill.createdAt.toISOString(), bill.createdBy]
-    );
+
+    await database.withTransactionAsync(async () => {
+        // Insert Bill
+        await database.runAsync(
+            `INSERT INTO bills (id, items, subtotal, gstAmount, total, customerId, createdAt, createdBy) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [bill.id, JSON.stringify(bill.items), bill.subtotal, bill.gstAmount, bill.total, bill.customerId || null, bill.createdAt.toISOString(), bill.createdBy]
+        );
+
+        // Update Product Stock
+        for (const item of bill.items) {
+            if (item.product.id) {
+                await database.runAsync(
+                    `UPDATE products SET stock = stock - ? WHERE id = ?`,
+                    [item.quantity, item.product.id]
+                );
+            }
+        }
+    });
 };
 
 export const getBillsByDate = async (date: Date): Promise<Bill[]> => {
@@ -578,3 +592,73 @@ export const getDatabaseStats = async (): Promise<{
     };
 };
 
+// ============ REPORTING ============
+
+// ============ REPORTING ============
+
+export const getProductSalesStats = async (startDate: Date, endDate: Date): Promise<ProductSalesStat[]> => {
+    const database = await getDatabase();
+    // Get all bills in range
+    const bills = await getBillsByDateRange(startDate, endDate);
+
+    const statsMap = new Map<string, ProductSalesStat>();
+
+    // Process bills to aggregate sales
+    for (const bill of bills) {
+        for (const item of bill.items) {
+            const existing = statsMap.get(item.product.id);
+            if (existing) {
+                existing.quantitySold += item.quantity;
+                existing.totalRevenue += item.product.price * item.quantity;
+            } else {
+                statsMap.set(item.product.id, {
+                    productId: item.product.id,
+                    productName: item.product.nameEn,
+                    quantitySold: item.quantity,
+                    totalRevenue: item.product.price * item.quantity,
+                });
+            }
+        }
+    }
+
+    return Array.from(statsMap.values()).sort((a, b) => b.totalRevenue - a.totalRevenue);
+};
+
+export const getLowStockProducts = async (threshold: number = 10): Promise<Product[]> => {
+    const database = await getDatabase();
+    const rows = await database.getAllAsync<any>(
+        'SELECT * FROM products WHERE stock <= ? ORDER BY stock ASC',
+        [threshold]
+    );
+    return rows.map(row => ({
+        ...row,
+        isGstInclusive: Boolean(row.isGstInclusive),
+        createdAt: new Date(row.createdAt),
+    }));
+};
+
+export const getInventoryValue = async (): Promise<number> => {
+    const database = await getDatabase();
+    const result = await database.getFirstAsync<{ totalValue: number }>(
+        'SELECT SUM(price * stock) as totalValue FROM products WHERE stock > 0'
+    );
+    return result?.totalValue || 0;
+};
+
+// Get total quantity sold for each product (all time)
+export const getTotalSalesPerProduct = async (): Promise<Map<string, number>> => {
+    const database = await getDatabase();
+    const rows = await database.getAllAsync<{ productId: string; totalSold: number }>(
+        `SELECT json_extract(value, '$.product.id') as productId, SUM(json_extract(value, '$.quantity')) as totalSold
+         FROM bills, json_each(bills.items)
+         GROUP BY productId`
+    );
+
+    const salesMap = new Map<string, number>();
+    rows.forEach(row => {
+        if (row.productId) {
+            salesMap.set(row.productId, row.totalSold);
+        }
+    });
+    return salesMap;
+};

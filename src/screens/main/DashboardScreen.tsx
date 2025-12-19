@@ -96,6 +96,20 @@ export default function DashboardScreen() {
           color: colors.categories.dairy,
           onPress: () => navigation.navigate('BulkUpload'),
         },
+        {
+          icon: 'stats-chart-outline' as const,
+          title: 'Product Sales',
+          subtitle: 'Analysis',
+          color: colors.categories.beverages,
+          onPress: () => navigation.navigate('ProductSalesStats'),
+        },
+        {
+          icon: 'list-outline' as const,
+          title: 'Inventory',
+          subtitle: 'Status & Value',
+          color: colors.categories.snacks,
+          onPress: () => navigation.navigate('InventoryStatus'),
+        },
       ]
     : [
         {

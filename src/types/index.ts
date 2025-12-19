@@ -86,3 +86,11 @@ export interface AppState {
 
 export type LoginMethod = 'phone' | 'username';
 
+export interface ProductSalesStat {
+  productId: string;
+  productName: string;
+  quantitySold: number;
+  totalRevenue: number;
+}
+
+

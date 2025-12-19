@@ -72,11 +72,26 @@ export default function BulkUploadScreen() {
         const usedCodes = new Set<string>();
         const existingCodes = new Set(state.products.map(p => p.productCode).filter(Boolean));
 
+        // Find max existing numeric code for auto-generation
+        const existingNumericCodes = state.products
+          .map(p => parseInt(p.productCode || '0', 10))
+          .filter(code => !isNaN(code));
+        let nextAutoCode = (existingNumericCodes.length > 0 ? Math.max(...existingNumericCodes) : 100) + 1;
+
         for (let i = 1; i < jsonData.length; i++) {
           const row = jsonData[i];
-          if (!row || row.length === 0 || !row[0]) continue; // Skip empty rows
+          if (!row || row.length === 0 || !row[0]) {
+             // If row is empty or just first cell is empty, check if other cells have data
+             if (!row || row.length === 0 || (!row[1] && !row[3] && !row[4])) continue;
+          }
 
-          const productCode = row[0]?.toString().trim();
+          let productCode = row[0]?.toString().trim();
+          
+          // Auto-generate code if missing
+          if (!productCode) {
+             productCode = String(nextAutoCode++);
+          }
+
           const nameEn = row[1]?.toString().trim();
           const nameTa = row[2]?.toString().trim() || nameEn;
           const categoryName = row[3]?.toString().trim();
@@ -89,10 +104,8 @@ export default function BulkUploadScreen() {
           const imageUri = row[10]?.toString().trim() || undefined;
 
           // Validate required fields
-          if (!productCode) {
-            errors.push(`Row ${i + 1}: Missing product code`);
-            continue;
-          }
+          // Product Code is now guaranteed to exist (either provided or auto-generated)
+          
           // Check for duplicate product code within file
           if (usedCodes.has(productCode)) {
             errors.push(`Row ${i + 1}: Duplicate product code "${productCode}" in file`);
@@ -230,7 +243,7 @@ export default function BulkUploadScreen() {
       const productsData = [
         // Header row
         [
-          'Product Code *',
+          'Product Code (Auto if empty)',
           'Name (English) *',
           'Name (Tamil)',
           'Category *',
@@ -321,7 +334,7 @@ export default function BulkUploadScreen() {
         ['BULK UPLOAD INSTRUCTIONS'],
         [''],
         ['Required Columns (marked with *):'],
-        ['- Product Code: Unique number for quick search (e.g., 101, 102)'],
+        ['- Product Code: Unique number. LEAVE EMPTY to auto-generate.'],
         ['- Name (English): Product name in English'],
         ['- Category: Must match exactly with categories in Categories sheet'],
         ['- Price: Numeric value (e.g., 100, 50.50)'],
@@ -500,7 +513,7 @@ export default function BulkUploadScreen() {
             <Text style={styles.columnHeader}>Required</Text>
           </View>
           {[
-            { col: 'A', field: 'Product Code', required: true },
+            { col: 'A', field: 'Product Code', required: false },
             { col: 'B', field: 'Name (English)', required: true },
             { col: 'C', field: 'Name (Tamil)', required: false },
             { col: 'D', field: 'Category', required: true },
