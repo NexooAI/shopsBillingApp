@@ -28,6 +28,7 @@ import AddCategoryScreen from '../screens/admin/AddCategoryScreen';
 import BulkUploadScreen from '../screens/admin/BulkUploadScreen';
 import SettingsScreen from '../screens/admin/SettingsScreen';
 import ServerSyncScreen from '../screens/admin/ServerSyncScreen';
+import ShopProfileScreen from '../screens/admin/ShopProfileScreen';
 import PrinterSettingsScreen from '../screens/admin/PrinterSettingsScreen';
 
 // Bill Screen
@@ -42,12 +43,13 @@ export type RootStackParamList = {
   CategoryManagement: undefined;
   ProductManagement: undefined;
   UserManagement: undefined;
-  AddProduct: { categoryId?: string };
+  AddProduct: { categoryId?: string; product?: import('../types').Product };
   AddCategory: { category?: any };
   BulkUpload: undefined;
   Settings: undefined;
   ServerSync: undefined;
   PrinterSettings: undefined;
+  ShopProfile: undefined;
   BillPreview: { bill: any };
   SalesSummary: undefined;
   ProductSalesStats: undefined;
@@ -57,7 +59,7 @@ export type RootStackParamList = {
 export type MainTabParamList = {
   Dashboard: undefined;
   Products: undefined;
-  Billing: undefined;
+  Billing: { bill?: any }; // Using any to avoid circular dependency or import issues for now, or Import Bill
   Sales: undefined;
 };
 
@@ -91,8 +93,8 @@ function MainTabs() {
         tabBarStyle: {
           backgroundColor: colors.white,
           borderTopColor: colors.border,
-          height: 60,
-          paddingBottom: 8,
+          height: 70,
+          paddingBottom: 12,
           paddingTop: 8,
         },
         tabBarLabelStyle: {
@@ -123,13 +125,11 @@ function MainTabs() {
         component={BillingScreen}
         options={{ title: 'Billing' }}
       />
-      {isAdmin && (
-        <Tab.Screen
-          name="Sales"
-          component={SalesSummaryScreen}
-          options={{ title: 'Sales' }}
-        />
-      )}
+      <Tab.Screen
+        name="Sales"
+        component={SalesSummaryScreen}
+        options={{ title: 'Sales' }}
+      />
     </Tab.Navigator>
   );
 }
@@ -148,6 +148,8 @@ export default function AppNavigator() {
           headerTitleStyle: {
             fontWeight: '700',
           },
+          animation: 'slide_from_right',
+          statusBarTranslucent: true,
         }}
       >
         {!state.isSetupComplete ? (
@@ -222,6 +224,11 @@ export default function AppNavigator() {
               name="PrinterSettings"
               component={PrinterSettingsScreen}
               options={{ title: 'Printer Settings' }}
+            />
+            <Stack.Screen
+              name="ShopProfile"
+              component={ShopProfileScreen}
+              options={{ title: 'Shop Profile' }}
             />
             <Stack.Screen
               name="BillPreview"

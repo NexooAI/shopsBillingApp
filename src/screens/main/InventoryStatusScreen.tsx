@@ -12,11 +12,13 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { colors, spacing, borderRadius, fontSize, fontWeight, shadows } from '../../theme';
+import { useLanguage } from '../../context/LanguageContext';
 import { getLowStockProducts, getInventoryValue, getAllProducts, getTotalSalesPerProduct } from '../../services/sqliteDatabase';
 import { Product } from '../../types';
 
 export default function InventoryStatusScreen() {
   const navigation = useNavigation();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<Product[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
@@ -70,13 +72,13 @@ export default function InventoryStatusScreen() {
           styles.stockText, 
           (item.stock || 0) <= 10 ? styles.lowStockText : styles.normalStockText
         ]}>
-          In Stock: {item.stock || 0} {item.unit}
+          {t('inventory.inStock')}: {item.stock || 0} {item.unit}
         </Text>
         <Text style={styles.soldText}>
-          (Sold: {soldCountMap.get(item.id) || 0})
+          ({t('inventory.sold')}: {soldCountMap.get(item.id) || 0})
         </Text>
         <Text style={styles.stockValue}>
-          Value: ₹{((item.stock || 0) * item.price).toFixed(0)}
+          {t('inventory.value')}: ₹{((item.stock || 0) * item.price).toFixed(0)}
         </Text>
       </View>
     </View>
@@ -88,7 +90,7 @@ export default function InventoryStatusScreen() {
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                 <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
             </TouchableOpacity>
-            <Text style={styles.title}>Inventory Status</Text>
+            <Text style={styles.title}>{t('inventory.title')}</Text>
         </View>
 
         {loading ? (
@@ -100,13 +102,13 @@ export default function InventoryStatusScreen() {
                 {/* Summary Cards */}
                 <View style={styles.summaryGrid}>
                     <View style={styles.summaryCard}>
-                        <Text style={styles.summaryLabel}>Total Value</Text>
+                        <Text style={styles.summaryLabel}>{t('inventory.totalValue')}</Text>
                         <Text style={[styles.summaryValue, { color: colors.success }]}>
                             ₹{inventoryValue.toFixed(0)}
                         </Text>
                     </View>
                     <View style={styles.summaryCard}>
-                        <Text style={styles.summaryLabel}>Low Stock Items</Text>
+                        <Text style={styles.summaryLabel}>{t('inventory.lowStockItems')}</Text>
                         <Text style={[styles.summaryValue, { color: colors.error }]}>
                             {lowStockProducts.length}
                         </Text>
@@ -118,12 +120,12 @@ export default function InventoryStatusScreen() {
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
                             <Ionicons name="warning-outline" size={20} color={colors.error} />
-                            <Text style={[styles.sectionTitle, { color: colors.error }]}>Low Stock Alerts</Text>
+                            <Text style={[styles.sectionTitle, { color: colors.error }]}>{t('inventory.lowStockAlerts')}</Text>
                         </View>
                         {lowStockProducts.map(item => (
                             <View key={item.id} style={styles.alertRow}>
                                 <Text style={styles.alertName}>{item.nameEn}</Text>
-                                <Text style={styles.alertStock}>{item.stock || 0} left</Text>
+                                <Text style={styles.alertStock}>{item.stock || 0} {t('inventory.stockLeft')}</Text>
                             </View>
                         ))}
                     </View>
@@ -131,12 +133,12 @@ export default function InventoryStatusScreen() {
 
                 {/* All Inventory */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Full Inventory</Text>
+                    <Text style={styles.sectionTitle}>{t('inventory.fullInventory')}</Text>
                     <View style={styles.searchBar}>
                         <Ionicons name="search-outline" size={20} color={colors.text.secondary} />
                         <TextInput
                             style={styles.searchInput}
-                            placeholder="Search products..."
+                            placeholder={t('inventory.searchPlaceholder')}
                             value={searchQuery}
                             onChangeText={setSearchQuery}
                         />

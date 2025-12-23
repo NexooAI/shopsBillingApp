@@ -6,12 +6,15 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors, spacing, borderRadius, fontSize, fontWeight, shadows } from '../../theme';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useApp } from '../../context/AppContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { Bill } from '../../types';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 
@@ -75,14 +78,69 @@ function BillCard({ bill, onPress }: BillCardProps) {
   );
 }
 
+function BillGridCard({ bill, onPress }: BillCardProps) {
+  const time = new Date(bill.createdAt).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const itemCount = bill.items.reduce((sum, item) => sum + item.quantity, 0);
+
+  return (
+    <TouchableOpacity style={styles.billGridCard} onPress={onPress}>
+      <View style={styles.gridHeader}>
+        <Text style={styles.billId}>#{bill.id.slice(-6)}</Text>
+        <Text style={styles.billTime}>{time}</Text>
+      </View>
+      <View style={styles.gridContent}>
+        <Text style={styles.gridTotal}>₹{bill.total.toFixed(2)}</Text>
+        <Text style={styles.gridItems}>{itemCount} items</Text>
+      </View>
+      <Text style={styles.gridGst}>GST: ₹{bill.gstAmount.toFixed(2)}</Text>
+    </TouchableOpacity>
+  );
+}
+
 export default function SalesSummaryScreen() {
   const navigation = useNavigation<NavigationProp>();
-  const { state, getDailySales } = useApp();
+  const { state, getSalesStats } = useApp();
+  const { t, language } = useLanguage();
+  const [rangeType, setRangeType] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('daily');
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
-  const dailySales = useMemo(() => {
-    return getDailySales(selectedDate);
-  }, [selectedDate, state.bills]);
+  const onDateChange = (event: any, date?: Date) => {
+    setShowDatePicker(false);
+    if (date) {
+      setSelectedDate(date);
+      setRangeType('daily');
+    }
+  };
+
+  // Date ranges for stats
+  const stats = useMemo(() => {
+    let start = new Date(selectedDate);
+    let end = new Date(selectedDate);
+
+    if (rangeType === 'daily') {
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+    } else if (rangeType === 'weekly') {
+      // Last 7 days including today
+      start = new Date();
+      start.setDate(start.getDate() - 6);
+      start.setHours(0, 0, 0, 0);
+      end = new Date();
+    } else if (rangeType === 'monthly') {
+      // Current month
+      start = new Date();
+      start.setDate(1);
+      start.setHours(0, 0, 0, 0);
+      end = new Date();
+    }
+
+    return getSalesStats(start, end);
+  }, [rangeType, selectedDate, state.bills]);
 
   const dates = useMemo(() => {
     const result = [];
@@ -94,91 +152,135 @@ export default function SalesSummaryScreen() {
     return result;
   }, []);
 
-  const isToday = selectedDate.toDateString() === new Date().toDateString();
-  const dateLabel = isToday
-    ? "Today's Sales"
-    : selectedDate.toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-      });
+  const getLabel = () => {
+      if (rangeType === 'daily') {
+          return selectedDate.toDateString() === new Date().toDateString() 
+            ? t('sales.todaysSales') 
+            : selectedDate.toLocaleDateString(language === 'ta' ? 'ta-IN' : 'en-US');
+      }
+      if (rangeType === 'weekly') return t('sales.last7Days');
+      if (rangeType === 'monthly') return t('sales.thisMonth');
+      return t('sales.salesSummary');
+  };
+
+  const salesData = stats || { totalRevenue: 0, totalProducts: 0, totalCustomers: 0, bills: [] };
 
   // Calculate average bill value
   const avgBillValue =
-    dailySales.totalCustomers > 0
-      ? dailySales.totalRevenue / dailySales.totalCustomers
+    salesData.totalCustomers > 0
+      ? salesData.totalRevenue / salesData.totalCustomers
       : 0;
 
   // Calculate GST collected
-  const gstCollected = dailySales.bills.reduce(
+  const gstCollected = salesData.bills.reduce(
     (sum, bill) => sum + bill.gstAmount,
     0
   );
+  
+  const handleBillPress = (bill: Bill) => {
+    const userRole = state.user?.role;
+    if (userRole === 'admin' || userRole === 'super_admin') {
+       navigation.navigate('BillPreview', { bill });
+    } else {
+       Alert.alert(t('common.error'), 'Access Restricted: Only Admin can view/edit bill details.');
+    }
+  };
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Date Selector */}
+      {/* Range Selector */}
       <View style={styles.dateSection}>
-        <Text style={styles.sectionTitle}>Select Date</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.dateSelector}
-        >
-          {dates.map((date, index) => {
-            const isSelected = date.toDateString() === selectedDate.toDateString();
-            const isTodayDate = date.toDateString() === new Date().toDateString();
-            return (
-              <TouchableOpacity
-                key={index}
-                style={[styles.dateCard, isSelected && styles.dateCardSelected]}
-                onPress={() => setSelectedDate(date)}
-              >
-                <Text style={[styles.dateDay, isSelected && styles.dateDaySelected]}>
-                  {date.toLocaleDateString('en-US', { weekday: 'short' })}
-                </Text>
-                <Text style={[styles.dateNum, isSelected && styles.dateNumSelected]}>
-                  {date.getDate()}
-                </Text>
-                {isTodayDate && (
-                  <View style={[styles.todayDot, isSelected && styles.todayDotSelected]} />
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        <View style={styles.rangeTabs}>
+            {(['daily', 'weekly', 'monthly'] as const).map((type) => (
+                <TouchableOpacity
+                    key={type}
+                    style={[styles.rangeTab, rangeType === type && styles.rangeTabActive]}
+                    onPress={() => setRangeType(type)}
+                >
+                    <Text style={[styles.rangeTabText, rangeType === type && styles.rangeTabTextActive]}>
+                        {t(`sales.${type}`)}
+                    </Text>
+                </TouchableOpacity>
+            ))}
+            <TouchableOpacity 
+                style={[styles.rangeTab, { paddingHorizontal: spacing.sm }]} 
+                onPress={() => setShowDatePicker(true)}
+            >
+                <Ionicons name="calendar-outline" size={18} color={colors.text.secondary} />
+            </TouchableOpacity>
+        </View>
+
+        {showDatePicker && (
+            <DateTimePicker
+                value={selectedDate}
+                mode="date"
+                display="default"
+                onChange={onDateChange}
+                maximumDate={new Date()}
+            />
+        )}
+
+        {rangeType === 'daily' && (
+            <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.dateSelector}
+            >
+            {dates.map((date, index) => {
+                const isSelected = date.toDateString() === selectedDate.toDateString();
+                const isTodayDate = date.toDateString() === new Date().toDateString();
+                return (
+                <TouchableOpacity
+                    key={index}
+                    style={[styles.dateCard, isSelected && styles.dateCardSelected]}
+                    onPress={() => setSelectedDate(date)}
+                >
+                    <Text style={[styles.dateDay, isSelected && styles.dateDaySelected]}>
+                    {date.toLocaleDateString(language === 'ta' ? 'ta-IN' : 'en-US', { weekday: 'short' })}
+                    </Text>
+                    <Text style={[styles.dateNum, isSelected && styles.dateNumSelected]}>
+                    {date.getDate()}
+                    </Text>
+                    {isTodayDate && (
+                    <View style={[styles.todayDot, isSelected && styles.todayDotSelected]} />
+                    )}
+                </TouchableOpacity>
+                );
+            })}
+            </ScrollView>
+        )}
       </View>
 
       {/* Stats Overview */}
       <View style={styles.statsSection}>
-        <Text style={styles.sectionTitle}>{dateLabel}</Text>
+        <Text style={styles.sectionTitle}>{getLabel()}</Text>
         <View style={styles.statsGrid}>
           <StatCard
             icon="cash-outline"
-            title="Total Revenue"
-            value={`₹${dailySales.totalRevenue.toFixed(0)}`}
-            subtitle="Including GST"
+            title={t('sales.totalRevenue')}
+            value={`₹${salesData.totalRevenue.toFixed(0)}`}
+            subtitle={t('sales.includingGst')}
             color={colors.success}
           />
           <StatCard
             icon="receipt-outline"
-            title="Total Bills"
-            value={dailySales.totalCustomers.toString()}
-            subtitle="Customers served"
+            title={t('sales.totalBills')}
+            value={salesData.totalCustomers.toString()}
+            subtitle={t('sales.customersServed')}
             color={colors.info}
           />
           <StatCard
             icon="cube-outline"
-            title="Products Sold"
-            value={dailySales.totalProducts.toString()}
-            subtitle="Total quantity"
+            title={t('sales.productsSold')}
+            value={salesData.totalProducts.toString()}
+            subtitle={t('sales.totalQuantity')}
             color={colors.warning}
           />
           <StatCard
             icon="calculator-outline"
-            title="Avg Bill Value"
+            title={t('sales.avgBillValue')}
             value={`₹${avgBillValue.toFixed(0)}`}
-            subtitle="Per customer"
+            subtitle={t('sales.perCustomer')}
             color={colors.secondary}
           />
         </View>
@@ -190,25 +292,25 @@ export default function SalesSummaryScreen() {
           style={styles.breakdownButton}
           onPress={() => navigation.navigate('ProductSalesStats')}
         >
-          <Text style={styles.breakdownButtonText}>View Product Breakdown</Text>
+          <Text style={styles.breakdownButtonText}>{t('sales.viewBreakdown')}</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
       {/* GST Summary */}
       <View style={styles.gstSection}>
-        <Text style={styles.sectionTitle}>Tax Summary</Text>
+        <Text style={styles.sectionTitle}>{t('sales.taxSummary')}</Text>
         <View style={styles.gstCard}>
           <View style={styles.gstRow}>
             <View style={styles.gstItem}>
-              <Text style={styles.gstLabel}>Subtotal (excl. GST)</Text>
+              <Text style={styles.gstLabel}>{t('sales.subtotalExclGst')}</Text>
               <Text style={styles.gstValue}>
-                ₹{(dailySales.totalRevenue - gstCollected).toFixed(2)}
+                ₹{(salesData.totalRevenue - gstCollected).toFixed(2)}
               </Text>
             </View>
             <View style={styles.gstDivider} />
             <View style={styles.gstItem}>
-              <Text style={styles.gstLabel}>GST Collected</Text>
+              <Text style={styles.gstLabel}>{t('sales.gstCollected')}</Text>
               <Text style={[styles.gstValue, { color: colors.success }]}>
                 ₹{gstCollected.toFixed(2)}
               </Text>
@@ -220,27 +322,54 @@ export default function SalesSummaryScreen() {
       {/* Recent Bills */}
       <View style={styles.billsSection}>
         <View style={styles.billsHeader}>
-          <Text style={styles.sectionTitle}>Bills</Text>
-          <Text style={styles.billCount}>{dailySales.bills.length} bills</Text>
+          <View style={styles.billsTitleRow}>
+            <Text style={styles.sectionTitle}>{t('dashboard.bills')}</Text>
+            <Text style={styles.billCount}>{salesData.bills.length} {t('dashboard.bills')}</Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.viewToggle}
+            onPress={() => setViewMode(prev => prev === 'list' ? 'grid' : 'list')}
+          >
+            <Ionicons 
+              name={viewMode === 'list' ? 'grid-outline' : 'list-outline'} 
+              size={20} 
+              color={colors.primary} 
+            />
+          </TouchableOpacity>
         </View>
 
-        {dailySales.bills.length > 0 ? (
-          dailySales.bills
-            .slice()
-            .reverse()
-            .map((bill) => (
-              <BillCard
-                key={bill.id}
-                bill={bill}
-                onPress={() => navigation.navigate('BillPreview', { bill })}
-              />
-            ))
+        {salesData.bills.length > 0 ? (
+          viewMode === 'list' ? (
+            salesData.bills
+              .slice()
+              .reverse()
+              .map((bill) => (
+                <BillCard
+                  key={bill.id}
+                  bill={bill}
+                  onPress={() => handleBillPress(bill)}
+                />
+              ))
+          ) : (
+            <View style={styles.gridContainer}>
+              {salesData.bills
+                .slice()
+                .reverse()
+                .map((bill) => (
+                  <BillGridCard
+                    key={bill.id}
+                    bill={bill}
+                    onPress={() => handleBillPress(bill)}
+                  />
+                ))}
+            </View>
+          )
         ) : (
           <View style={styles.emptyState}>
             <Ionicons name="document-outline" size={48} color={colors.gray[300]} />
-            <Text style={styles.emptyTitle}>No Bills</Text>
+            <Text style={styles.emptyTitle}>{t('sales.noBills')}</Text>
             <Text style={styles.emptySubtitle}>
-              No bills were generated on this day
+              {t('sales.noBillsMessage')}
             </Text>
           </View>
         )}
@@ -273,6 +402,33 @@ const styles = StyleSheet.create({
   dateSelector: {
     paddingHorizontal: spacing.lg,
     gap: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  rangeTabs: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  rangeTab: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.white,
+  },
+  rangeTabActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  rangeTabText: {
+    fontSize: fontSize.sm,
+    color: colors.text.secondary,
+    fontWeight: fontWeight.medium,
+  },
+  rangeTabTextActive: {
+    color: colors.white,
   },
   dateCard: {
     width: 56,
@@ -394,6 +550,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.md,
+    paddingRight: spacing.lg,
+  },
+  billsTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.sm,
+  },
+  viewToggle: {
+    padding: spacing.xs,
+    backgroundColor: colors.gray[100],
+    borderRadius: borderRadius.md,
   },
   billCount: {
     fontSize: fontSize.sm,
@@ -485,6 +652,41 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
     color: colors.primary,
     marginRight: spacing.sm,
+  },
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  billGridCard: {
+    width: '48%',
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    ...shadows.small,
+  },
+  gridHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  gridContent: {
+    marginBottom: spacing.sm,
+  },
+  gridTotal: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    color: colors.text.primary,
+  },
+  gridItems: {
+    fontSize: fontSize.xs,
+    color: colors.text.secondary,
+  },
+  gridGst: {
+    fontSize: fontSize.xs,
+    color: colors.gray[500],
   },
 });
 

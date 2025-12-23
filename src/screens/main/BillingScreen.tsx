@@ -11,14 +11,18 @@ import {
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors, spacing, borderRadius, fontSize, fontWeight, shadows } from '../../theme';
 import { useApp } from '../../context/AppContext';
-import { Product, CartItem } from '../../types';
-import { RootStackParamList } from '../../navigation/AppNavigator';
+import { useLanguage } from '../../context/LanguageContext';
+import { Product, CartItem, Customer, Bill } from '../../types';
+import { RootStackParamList, MainTabParamList } from '../../navigation/AppNavigator';
+
+// ... (existing code)
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+type BillingScreenRouteProp = RouteProp<MainTabParamList, 'Billing'>;
 
 interface CartItemCardProps {
   item: CartItem;
@@ -29,6 +33,7 @@ interface CartItemCardProps {
 function CartItemCard({ item, onUpdateQuantity, onRemove }: CartItemCardProps) {
   const { product, quantity } = item;
   const itemTotal = product.price * quantity;
+  const { t } = useLanguage();
 
   return (
     <View style={styles.cartItemCard}>
@@ -140,9 +145,61 @@ function ProductQuickAdd({ product, onAdd, isExactMatch }: ProductQuickAddProps)
 
 export default function BillingScreen() {
   const navigation = useNavigation<NavigationProp>();
-  const { state, addToCart, updateCartItem, removeFromCart, clearCart, createBill } = useApp();
+  const route = useRoute<BillingScreenRouteProp>();
+  const { state, addToCart, updateCartItem, removeFromCart, clearCart, setCart, createBill, updateBill, getCustomerByPhone, dispatch } = useApp();
+  const { t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [gstMode, setGstMode] = useState<'inclusive' | 'exclusive'>('exclusive');
+
+  // Edit Mode State
+  const [existingBillId, setExistingBillId] = useState<string | null>(null);
+  const [existingBillDate, setExistingBillDate] = useState<Date | null>(null);
+
+  // Customer State
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
+  const [customerNotes, setCustomerNotes] = useState('');
+  const [existingCustomer, setExistingCustomer] = useState<Customer | null>(null);
+
+  React.useEffect(() => {
+    if (route.params?.bill) {
+      const bill = route.params.bill;
+      setExistingBillId(bill.id);
+      setExistingBillDate(bill.createdAt);
+      
+      // Populate Cart
+      setCart(bill.items);
+
+      // Populate Customer
+      if (bill.customer) {
+        setExistingCustomer(bill.customer);
+        setCustomerName(bill.customer.name);
+        setCustomerPhone(bill.customer.phone);
+        setCustomerAddress(bill.customer.address || '');
+        setCustomerNotes(bill.customer.notes || '');
+      }
+    }
+  }, [route.params?.bill]);
+
+  // Auto-fetch customer
+  const handlePhoneChange = async (text: string) => {
+    setCustomerPhone(text);
+    if (text.length === 10) {
+      const customer = await getCustomerByPhone(text);
+      if (customer) {
+        setExistingCustomer(customer);
+        setCustomerName(customer.name);
+        setCustomerAddress(customer.address || '');
+        setCustomerNotes(customer.notes || '');
+      } else {
+        setExistingCustomer(null);
+        // Don't clear name/address instantly to allow typing new one without interruption
+        // But maybe cleaner to clear if we want "Auto Fetch" feeling
+      }
+    }
+  };
 
   // Find exact match by code or barcode
   const exactMatch = useMemo(() => {
@@ -156,11 +213,18 @@ export default function BillingScreen() {
   }, [state.products, searchQuery]);
 
   const filteredProducts = useMemo(() => {
-    if (!searchQuery.trim()) return state.products.slice(0, 10);
+    let products = state.products;
+
+    // First filter by category if selected
+    if (selectedCategory) {
+      products = products.filter(p => p.categoryId === selectedCategory);
+    }
+    
+    if (!searchQuery.trim()) return products.slice(0, 50); // Limit initial load
     const query = searchQuery.toLowerCase().trim();
 
     // Filter products by code, barcode, or name
-    const filtered = state.products.filter(
+    const filtered = products.filter(
       (p) =>
         p.productCode?.toLowerCase().includes(query) ||
         p.barcode?.toLowerCase().includes(query) ||
@@ -175,7 +239,7 @@ export default function BillingScreen() {
     }
 
     return filtered;
-  }, [state.products, searchQuery, exactMatch]);
+  }, [state.products, searchQuery, exactMatch, selectedCategory]);
 
   const cartSummary = useMemo(() => {
     let subtotal = 0;
@@ -197,44 +261,109 @@ export default function BillingScreen() {
       }
     });
 
+    const rawTotal = gstMode === 'inclusive'
+        ? state.cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0)
+        : subtotal + gstAmount;
+    
+    const grandTotal = Math.round(rawTotal);
+    const roundOff = Math.round((grandTotal - rawTotal) * 100) / 100;
+
     return {
       subtotal: Math.round(subtotal * 100) / 100,
       gstAmount: Math.round(gstAmount * 100) / 100,
-      total: Math.round((subtotal + gstAmount) * 100) / 100,
-      // For inclusive mode, total = subtotal (displayed prices)
-      // For exclusive mode, total = subtotal + GST
-      finalTotal: gstMode === 'inclusive'
-        ? Math.round(state.cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0) * 100) / 100
-        : Math.round((subtotal + gstAmount) * 100) / 100,
+      total: Math.round(rawTotal * 100) / 100,
+      grandTotal: Math.round(grandTotal * 100) / 100,
+      roundOff: roundOff,
     };
   }, [state.cart, gstMode]);
 
   const handleCreateBill = () => {
     if (state.cart.length === 0) {
-      Alert.alert('Empty Cart', 'Please add items to create a bill');
+      Alert.alert(t('billing.emptyCart'), t('billing.addItem'));
       return;
     }
 
     const gstModeText = gstMode === 'inclusive'
-      ? 'GST Inclusive (No extra GST)'
-      : 'GST Exclusive (GST Added)';
+      ? `${t('billing.gstInclusive')} (${t('billing.noExtraGst')})`
+      : `${t('billing.gstExclusive')} (${t('billing.gstAdded')})`;
 
     Alert.alert(
-      'Create Bill',
-      `${gstModeText}\n\nSubtotal: ₹${cartSummary.subtotal.toFixed(2)}\nGST: ₹${cartSummary.gstAmount.toFixed(2)}\n\nTotal Payable: ₹${cartSummary.finalTotal.toFixed(2)}\n\nProceed to generate bill?`,
+      t('billing.title'),
+      `${gstModeText}\n\n${t('billing.subtotal')}: ₹${cartSummary.subtotal.toFixed(2)}\n${t('billing.gst')}: ₹${cartSummary.gstAmount.toFixed(2)}\n${t('billing.roundOff')}: ₹${cartSummary.roundOff.toFixed(2)}\n\n${t('billing.total')}: ₹${cartSummary.grandTotal.toFixed(2)}\n\n${existingBillId ? t('billing.proceedUpdate') : t('billing.proceedGenerate')}`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Create Bill',
+          text: existingBillId ? t('billing.updateBill') : t('billing.createBill'),
           onPress: async () => {
             try {
-              const bill = await createBill();
-              if (bill) {
-                navigation.navigate('BillPreview', { bill });
+              let customer: Customer | undefined;
+              if (customerPhone.trim()) {
+                 if (customerPhone.length !== 10) {
+                     Alert.alert(t('common.error'), t('billing.invalidPhone'));
+                     return;
+                 }
+                 if (!customerName.trim()) {
+                     Alert.alert(t('common.error'), t('billing.missingName'));
+                     return;
+                 }
+                 customer = {
+                     id: existingCustomer?.id || Date.now().toString(),
+                     name: customerName,
+                     phone: customerPhone,
+                     address: customerAddress,
+                     notes: customerNotes,
+                     createdAt: existingCustomer?.createdAt || new Date(),
+                 };
+              }
+
+              if (existingBillId) {
+                  // Update Existing Bill
+                  const updatedBill: Bill = {
+                      id: existingBillId,
+                      items: [...state.cart],
+                      subtotal: cartSummary.subtotal,
+                      gstAmount: cartSummary.gstAmount,
+                      total: cartSummary.total,
+                      grandTotal: cartSummary.grandTotal,
+                      roundOff: cartSummary.roundOff,
+                      customerId: customer?.id,
+                      customer: customer,
+                      printStatus: 'reprinted', // Mark as reprinted on update
+                      createdAt: existingBillDate || new Date(), // Keep original date
+                      createdBy: state.user?.id || 'unknown',
+                  };
+
+                  await updateBill(updatedBill);
+                  
+                  // Clear forms
+                  setCustomerPhone('');
+                  setCustomerName('');
+                  setCustomerAddress('');
+                  setCustomerNotes('');
+                  setExistingCustomer(null);
+                  setExistingBillId(null);
+                  setExistingBillDate(null);
+                  dispatch({ type: 'CLEAR_CART' }); 
+                  
+                  navigation.navigate('BillPreview', { bill: updatedBill });
+
+              } else {
+                  // Create New Bill
+                  const bill = await createBill(customer);
+                  if (bill) {
+                    // Clear customer form
+                    setCustomerPhone('');
+                    setCustomerName('');
+                    setCustomerAddress('');
+                    setCustomerNotes('');
+                    setExistingCustomer(null);
+                    
+                    navigation.navigate('BillPreview', { bill });
+                  }
               }
             } catch (error) {
-              Alert.alert('Error', 'Failed to create bill. Please try again.');
-              console.error('Error creating bill:', error);
+              Alert.alert(t('common.error'), t('billing.saveError'));
+              console.error('Error saving bill:', error);
             }
           },
         },
@@ -245,9 +374,9 @@ export default function BillingScreen() {
   const handleClearCart = () => {
     if (state.cart.length === 0) return;
 
-    Alert.alert('Clear Cart', 'Are you sure you want to clear all items?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Clear', style: 'destructive', onPress: clearCart },
+    Alert.alert(t('billing.clearCart'), t('billing.confirmClear'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.delete'), style: 'destructive', onPress: clearCart },
     ]);
   };
 
@@ -307,7 +436,7 @@ export default function BillingScreen() {
               }}
             >
               <Ionicons name="add" size={18} color={colors.white} />
-              <Text style={styles.quickAddButtonText}>Add</Text>
+              <Text style={styles.quickAddButtonText}>{t('common.add')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -316,7 +445,7 @@ export default function BillingScreen() {
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.quickAddList}
-          contentContainerStyle={styles.quickAddContent}
+          contentContainerStyle={styles.quickAddScrollContent}
         >
           {filteredProducts.map((product) => (
             <ProductQuickAdd
@@ -332,6 +461,64 @@ export default function BillingScreen() {
             />
           ))}
         </ScrollView>
+      </View>
+
+      {/* Category Filters */}
+      <View style={styles.categoryFilterContainer}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoryFilterContent}
+        >
+          <TouchableOpacity
+            style={[styles.categoryChip, !selectedCategory && styles.categoryChipActive]}
+            onPress={() => setSelectedCategory(null)}
+          >
+            <Text style={[styles.categoryChipText, !selectedCategory && styles.categoryChipTextActive]}>{t('common.all')}</Text>
+          </TouchableOpacity>
+          {state.categories.map((cat) => (
+            <TouchableOpacity
+              key={cat.id}
+              style={[styles.categoryChip, selectedCategory === cat.id && styles.categoryChipActive]}
+              onPress={() => setSelectedCategory(cat.id)}
+            >
+              <Text style={[styles.categoryChipText, selectedCategory === cat.id && styles.categoryChipTextActive]}>
+                {cat.nameEn}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Customer Details Section */}
+      <View style={styles.customerSection}>
+        <Text style={styles.sectionTitle}>{t('billing.customerDetailsOptional')}</Text>
+        <View style={styles.inputRow}>
+            <TextInput
+                style={[styles.input, { flex: 1.5 }]}
+                placeholder={t('billing.mobile')}
+                value={customerPhone}
+                onChangeText={handlePhoneChange}
+                keyboardType="numeric"
+                maxLength={10}
+            />
+             <TextInput
+                style={[styles.input, { flex: 2 }]}
+                placeholder={t('billing.name')}
+                value={customerName}
+                onChangeText={setCustomerName}
+            />
+        </View>
+        {(customerPhone.length > 0) && (
+            <View style={styles.expandedInputs}>
+                <TextInput
+                    style={styles.input}
+                    placeholder={t('billing.address')}
+                    value={customerAddress}
+                    onChangeText={setCustomerAddress}
+                />
+            </View>
+        )}
       </View>
 
       {/* Cart Items */}
@@ -454,8 +641,19 @@ export default function BillingScreen() {
         </View>
         <View style={styles.divider} />
         <View style={styles.summaryRow}>
-          <Text style={styles.totalLabel}>Total Payable</Text>
-          <Text style={styles.totalValue}>₹{cartSummary.finalTotal.toFixed(2)}</Text>
+          <Text style={styles.summaryLabel}>Total</Text>
+          <Text style={styles.summaryValue}>₹{cartSummary.total.toFixed(2)}</Text>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Round Off</Text>
+          <Text style={styles.summaryValue}>
+            {cartSummary.roundOff > 0 ? '+' : ''}{cartSummary.roundOff.toFixed(2)}
+          </Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.summaryRow}>
+          <Text style={styles.totalLabel}>Grand Total</Text>
+          <Text style={styles.totalValue}>₹{cartSummary.grandTotal.toFixed(2)}</Text>
         </View>
 
         <TouchableOpacity
@@ -463,8 +661,8 @@ export default function BillingScreen() {
           onPress={handleCreateBill}
           disabled={state.cart.length === 0}
         >
-          <Ionicons name="receipt" size={20} color={colors.primary} />
-          <Text style={styles.billButtonText}>Generate Bill</Text>
+          <Ionicons name={existingBillId ? "save" : "receipt"} size={20} color={colors.primary} />
+          <Text style={styles.billButtonText}>{existingBillId ? 'Update Bill' : 'Generate Bill'}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -502,6 +700,36 @@ const styles = StyleSheet.create({
     marginLeft: spacing.sm,
     fontSize: fontSize.md,
     color: colors.text.primary,
+  },
+  categoryFilterContainer: {
+    backgroundColor: colors.white,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  categoryFilterContent: {
+    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
+  },
+  categoryChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.gray[100],
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  categoryChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  categoryChipText: {
+    fontSize: fontSize.sm,
+    color: colors.text.secondary,
+    fontWeight: fontWeight.medium,
+  },
+  categoryChipTextActive: {
+    color: colors.white,
   },
   barcodeButton: {
     width: 44,
@@ -796,6 +1024,34 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
     color: colors.text.secondary,
+  },
+  customerSection: {
+    backgroundColor: colors.white,
+    padding: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  sectionTitle: {
+      fontSize: fontSize.sm,
+      fontWeight: fontWeight.bold,
+      color: colors.text.secondary,
+      marginBottom: spacing.sm,
+  },
+  inputRow: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      marginBottom: spacing.xs,
+  },
+  input: {
+      backgroundColor: colors.gray[100],
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: borderRadius.md,
+      fontSize: fontSize.sm,
+      color: colors.text.primary,
+  },
+  expandedInputs: {
+      marginTop: spacing.sm,
   },
   gstToggleTextActive: {
     color: colors.white,

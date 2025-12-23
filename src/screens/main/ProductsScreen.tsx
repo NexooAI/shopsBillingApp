@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, fontSize, fontWeight, shadows } from '../../theme';
 import { useApp } from '../../context/AppContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { Product, Category, CartItem } from '../../types';
 
 const { width } = Dimensions.get('window');
@@ -29,7 +30,10 @@ interface ProductCardProps {
 }
 
 function ProductCard({ product, viewMode, cartItem, onAddToCart, onIncrement, onDecrement }: ProductCardProps) {
-  const gstLabel = product.isGstInclusive ? 'GST Incl.' : `+${product.gstPercentage}% GST`;
+  const { t } = useLanguage();
+  const gstLabel = product.isGstInclusive 
+    ? t('products.gstInclusive') 
+    : t('products.plusGst').replace('%s', product.gstPercentage.toString());
   const quantity = cartItem?.quantity || 0;
 
   // Render product image or placeholder
@@ -139,6 +143,7 @@ interface CategoryTabProps {
 }
 
 function CategoryTab({ category, isSelected, onSelect }: CategoryTabProps) {
+  const { language } = useLanguage();
   const iconMap: { [key: string]: keyof typeof Ionicons.glyphMap } = {
     basket: 'basket',
     leaf: 'leaf',
@@ -169,7 +174,7 @@ function CategoryTab({ category, isSelected, onSelect }: CategoryTabProps) {
         style={[styles.categoryName, isSelected && styles.categoryNameSelected]}
         numberOfLines={2}
       >
-        {category.nameEn}
+        {language === 'ta' ? category.nameTa : category.nameEn}
       </Text>
     </TouchableOpacity>
   );
@@ -177,9 +182,8 @@ function CategoryTab({ category, isSelected, onSelect }: CategoryTabProps) {
 
 export default function ProductsScreen() {
   const { state, addToCart, updateCartItem, removeFromCart } = useApp();
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(
-    state.categories[0]?.id || null
-  );
+  const { t } = useLanguage();
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -250,7 +254,7 @@ export default function ProductsScreen() {
           <Ionicons name="search" size={20} color={colors.gray[400]} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search products..."
+            placeholder={t('products.searchPlaceholder')}
             placeholderTextColor={colors.gray[400]}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -307,7 +311,7 @@ export default function ProductsScreen() {
             <Text
               style={[styles.categoryName, !selectedCategory && styles.categoryNameSelected]}
             >
-              All
+              {t('products.allCategories')}
             </Text>
           </TouchableOpacity>
           <FlatList
@@ -340,11 +344,11 @@ export default function ProductsScreen() {
           ) : (
             <View style={styles.emptyState}>
               <Ionicons name="cube-outline" size={64} color={colors.gray[300]} />
-              <Text style={styles.emptyTitle}>No Products Found</Text>
+              <Text style={styles.emptyTitle}>{t('products.noProductsFound')}</Text>
               <Text style={styles.emptySubtitle}>
                 {searchQuery
-                  ? 'Try a different search term'
-                  : 'Select a category or add products'}
+                  ? t('products.tryDifferentSearch')
+                  : t('products.selectCategoryOrAdd')}
               </Text>
             </View>
           )}
@@ -359,7 +363,7 @@ export default function ProductsScreen() {
               <Text style={styles.cartCount}>{state.cart.length}</Text>
             </View>
             <Text style={styles.cartText}>
-              {state.cart.reduce((sum, item) => sum + item.quantity, 0)} items
+              {state.cart.reduce((sum, item) => sum + item.quantity, 0)} {t('products.items')}
             </Text>
           </View>
           <Text style={styles.cartTotal}>

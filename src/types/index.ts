@@ -40,13 +40,31 @@ export interface CartItem {
   quantity: number;
 }
 
+
+export interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  address?: string;
+  notes?: string;
+  createdAt: Date;
+}
+
+export type PrintStatus = 'not_printed' | 'printed' | 'reprinted';
+
 export interface Bill {
   id: string;
   items: CartItem[];
   subtotal: number;
   gstAmount: number;
   total: number;
+  // New fields
   customerId?: string;
+  customer?: Customer; // For easier checking
+  roundOff: number;
+  grandTotal: number;
+  printStatus: PrintStatus;
+
   createdAt: Date;
   createdBy: string;
 }
@@ -65,6 +83,7 @@ export interface ShopSettings {
   address: string;
   phone: string;
   logoUri?: string;
+  gstin?: string; // New field for branding/billing
   adminUsername: string;
   adminPassword: string;
   setupComplete: boolean;
@@ -80,6 +99,7 @@ export interface AppState {
   cart: CartItem[];
   bills: Bill[];
   users: User[];
+  customers: Customer[]; // Add customers to state
   settings: ShopSettings | null;
   isSetupComplete: boolean;
 }

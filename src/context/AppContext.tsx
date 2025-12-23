@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode, useState } from 'react';
-import { User, Category, Product, CartItem, Bill, AppState, UserRole, ShopSettings } from '../types';
+import { User, Category, Product, CartItem, Bill, AppState, UserRole, ShopSettings, Customer } from '../types';
 import * as Database from '../services/sqliteDatabase';
 
 const initialState: AppState = {
@@ -10,6 +10,7 @@ const initialState: AppState = {
   cart: [],
   bills: [],
   users: [],
+  customers: [],
   settings: null,
   isSetupComplete: false,
 };
@@ -29,7 +30,9 @@ type Action =
   | { type: 'UPDATE_CART_ITEM'; payload: { productId: string; quantity: number } }
   | { type: 'REMOVE_FROM_CART'; payload: string }
   | { type: 'CLEAR_CART' }
+  | { type: 'SET_CART'; payload: CartItem[] }
   | { type: 'ADD_BILL'; payload: Bill }
+  | { type: 'UPDATE_BILL'; payload: Bill }
   | { type: 'ADD_USER'; payload: User }
   | { type: 'UPDATE_USER'; payload: User }
   | { type: 'DELETE_USER'; payload: string }
@@ -108,8 +111,17 @@ function appReducer(state: AppState, action: Action): AppState {
       };
     case 'CLEAR_CART':
       return { ...state, cart: [] };
+    case 'SET_CART':
+      return { ...state, cart: action.payload };
     case 'ADD_BILL':
       return { ...state, bills: [...state.bills, action.payload] };
+    case 'UPDATE_BILL':
+      return {
+        ...state,
+        bills: state.bills.map((b) =>
+          b.id === action.payload.id ? action.payload : b
+        ),
+      };
     case 'ADD_USER':
       return { ...state, users: [...state.users, action.payload] };
     case 'UPDATE_USER':
@@ -137,7 +149,10 @@ interface AppContextType {
   login: (username: string, password: string) => boolean;
   loginWithPhone: (phone: string, pin: string) => Promise<boolean>;
   configureShop: (settings: Omit<ShopSettings, 'id' | 'createdAt' | 'setupComplete'>) => Promise<void>;
+  updateShopSettings: (updates: Partial<ShopSettings>) => Promise<void>;
   resetAppData: () => Promise<void>;
+  factoryReset: () => Promise<void>;
+  clearBusinessData: (resetStock?: boolean) => Promise<void>;
   logout: () => void;
   addCategory: (category: Omit<Category, 'id' | 'createdAt'>) => Promise<void>;
   updateCategory: (category: Category) => Promise<void>;
@@ -150,18 +165,36 @@ interface AppContextType {
   updateCartItem: (productId: string, quantity: number) => void;
   removeFromCart: (productId: string) => void;
   clearCart: () => void;
-  createBill: () => Promise<Bill | null>;
+  setCart: (items: CartItem[]) => void;
+  createBill: (customer?: Customer) => Promise<Bill | null>;
+  updateBill: (bill: Bill) => Promise<void>;
   addUser: (user: Omit<User, 'id' | 'createdAt' | 'createdBy'>) => Promise<void>;
   updateUser: (user: User) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
   getProductsByCategory: (categoryId: string) => Product[];
-  getDailySales: (date?: Date) => { totalRevenue: number; totalProducts: number; totalCustomers: number; bills: Bill[] };
+  getDailySales: (date?: Date) => {
+    totalRevenue: number;
+    totalProducts: number;
+    totalCustomers: number;
+    bills: Bill[];
+  };
+  getSalesStats: (startDate: Date, endDate: Date) => {
+    totalRevenue: number;
+    totalProducts: number;
+    totalCustomers: number;
+    bills: Bill[];
+  };
   isLoading: boolean;
   refreshData: () => Promise<void>;
   // New SQLite-powered search functions
   searchProducts: (query: string) => Promise<Product[]>;
   getProductByBarcode: (barcode: string) => Promise<Product | null>;
   getProductByCode: (code: string) => Promise<Product | null>;
+  // Customer functions
+  searchCustomers: (query: string) => Promise<Customer[]>;
+  getCustomerByPhone: (phone: string) => Promise<Customer | null>;
+  upsertCustomer: (customer: Customer) => Promise<void>;
+  
   settings: ShopSettings | null;
   isSetupComplete: boolean;
 }
@@ -232,12 +265,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // Get product by code (instant lookup)
+  // Get product by code (instant lookup)
   const getProductByCode = async (code: string): Promise<Product | null> => {
     try {
       return await Database.getProductByCode(code);
     } catch (error) {
       console.error('Error getting product by code:', error);
       return null;
+    }
+  };
+
+  // Customer functions
+  const searchCustomers = async (query: string): Promise<Customer[]> => {
+    try {
+      return await Database.searchCustomers(query);
+    } catch (error) {
+      console.error('Error searching customers:', error);
+      return [];
+    }
+  };
+
+  const getCustomerByPhone = async (phone: string): Promise<Customer | null> => {
+    try {
+      return await Database.getCustomerByPhone(phone);
+    } catch (error) {
+      console.error('Error getting customer by phone:', error);
+      return null;
+    }
+  };
+
+  const upsertCustomer = async (customer: Customer): Promise<void> => {
+    try {
+      await Database.upsertCustomer(customer);
+    } catch (error) {
+      console.error('Error upserting customer:', error);
+      throw error;
     }
   };
 
@@ -272,9 +334,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateShopSettings = async (updates: Partial<ShopSettings>) => {
+    if (!state.settings) return;
+    const newSettings = { ...state.settings, ...updates };
+    try {
+        await Database.upsertSettings(newSettings);
+        dispatch({ type: 'SET_SETTINGS', payload: newSettings });
+    } catch (e) {
+        console.error("Error updating settings", e);
+        throw e;
+    }
+  };
+
+  // Reset all data but keep super admin; mark setup incomplete
   // Reset all data but keep super admin; mark setup incomplete
   const resetAppData = async () => {
     await Database.resetAppData();
+    const users = await Database.getAllUsers();
     dispatch({
       type: 'LOAD_STATE',
       payload: {
@@ -283,11 +359,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
         categories: [],
         products: [],
         bills: [],
-        users: [],
+        users,
         settings: null,
         isSetupComplete: false,
       },
     });
+  };
+
+  // Factory Reset: Clear EVERYTHING
+  // Factory Reset: Clear EVERYTHING
+  const factoryReset = async () => {
+    await Database.clearAllData();
+    const users = await Database.getAllUsers();
+    dispatch({
+      type: 'LOAD_STATE',
+      payload: {
+        user: null,
+        isAuthenticated: false,
+        categories: [],
+        products: [],
+        bills: [],
+        users,
+        customers: [],
+        settings: null,
+        isSetupComplete: false,
+      },
+    });
+  };
+
+  const clearBusinessData = async (resetStock: boolean = true) => {
+    try {
+        await Database.clearBusinessData(resetStock);
+        // Refresh local state after clearing
+        dispatch({ type: 'LOAD_STATE', payload: { bills: [], customers: [] } });
+        if (resetStock) {
+            // Reload products to reflect 0 stock
+            const products = await Database.getAllProducts(500);
+            dispatch({ type: 'LOAD_STATE', payload: { products } });
+        }
+    } catch (error) {
+        console.error('Error clearing business data:', error);
+        throw error;
+    }
   };
 
   // Refresh data from database
@@ -451,7 +564,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'CLEAR_CART' });
   };
 
-  const createBill = async (): Promise<Bill | null> => {
+  const setCart = (items: CartItem[]) => {
+    dispatch({ type: 'SET_CART', payload: items });
+  };
+
+  const createBill = async (customer?: Customer): Promise<Bill | null> => {
     if (state.cart.length === 0 || !state.user) return null;
 
     let subtotal = 0;
@@ -469,23 +586,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     });
 
+    const rawTotal = subtotal + gstAmount;
+    const grandTotal = Math.round(rawTotal);
+    const roundOff = grandTotal - rawTotal;
+
     const bill: Bill = {
       id: Date.now().toString(),
       items: [...state.cart],
       subtotal: Math.round(subtotal * 100) / 100,
       gstAmount: Math.round(gstAmount * 100) / 100,
-      total: Math.round((subtotal + gstAmount) * 100) / 100,
+      total: Math.round(rawTotal * 100) / 100,
+      
+      customerId: customer?.id,
+      customer: customer,
+      grandTotal: Math.round(grandTotal * 100) / 100,
+      roundOff: Math.round(roundOff * 100) / 100,
+      printStatus: 'not_printed',
+
       createdAt: new Date(),
       createdBy: state.user.id,
     };
 
     try {
+      // If customer is provided, ensure they are saved/updated first
+      if (customer) {
+        await Database.upsertCustomer(customer);
+      }
+
       await Database.insertBill(bill);
       dispatch({ type: 'ADD_BILL', payload: bill });
       dispatch({ type: 'CLEAR_CART' });
       return bill;
     } catch (error) {
       console.error('Error creating bill:', error);
+      throw error;
+    }
+  };
+
+  const updateBill = async (bill: Bill): Promise<void> => {
+    try {
+      await Database.updateBill(bill);
+      dispatch({ type: 'UPDATE_BILL', payload: bill });
+    } catch (error) {
+      console.error('Error updating bill:', error);
       throw error;
     }
   };
@@ -548,6 +691,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   };
 
+  const getSalesStats = (startDate: Date, endDate: Date) => {
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+
+    const filteredBills = state.bills.filter((bill) => {
+      const billDate = new Date(bill.createdAt);
+      return billDate >= start && billDate <= end;
+    });
+
+    return {
+      totalRevenue: filteredBills.reduce((sum, bill) => sum + bill.total, 0),
+      totalProducts: filteredBills.reduce(
+        (sum, bill) => sum + bill.items.reduce((s, item) => s + item.quantity, 0),
+        0
+      ),
+      totalCustomers: filteredBills.length,
+      bills: filteredBills,
+    };
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -567,17 +732,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
         updateCartItem,
         removeFromCart,
         clearCart,
+        setCart,
         createBill,
+        updateBill,
         addUser,
         updateUser,
         deleteUser,
         getProductsByCategory,
         getDailySales,
+        getSalesStats,
         configureShop,
+        updateShopSettings,
         resetAppData,
+        factoryReset,
+        clearBusinessData,
         isLoading,
         refreshData,
         searchProducts,
+        searchCustomers,
+        getCustomerByPhone,
+        upsertCustomer,
         getProductByBarcode,
         getProductByCode,
         settings: state.settings,

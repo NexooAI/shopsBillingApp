@@ -33,19 +33,21 @@ const PRODUCT_IMAGES_DIR = FileSystem.documentDirectory + 'product_images/';
 export default function AddProductScreen() {
   const navigation = useNavigation();
   const route = useRoute<AddProductRouteProp>();
-  const { state, addProduct } = useApp();
+  const { state, addProduct, updateProduct } = useApp();
+  
+  const editingProduct = route.params?.product;
 
-  const [productCode, setProductCode] = useState('');
-  const [nameEn, setNameEn] = useState('');
-  const [nameTa, setNameTa] = useState('');
-  const [categoryId, setCategoryId] = useState(route.params?.categoryId || '');
-  const [price, setPrice] = useState('');
-  const [unit, setUnit] = useState('kg');
-  const [gstPercentage, setGstPercentage] = useState(0);
-  const [isGstInclusive, setIsGstInclusive] = useState(false);
-  const [stock, setStock] = useState('');
-  const [barcode, setBarcode] = useState('');
-  const [imageUri, setImageUri] = useState<string | undefined>(undefined);
+  const [productCode, setProductCode] = useState(editingProduct?.productCode || '');
+  const [nameEn, setNameEn] = useState(editingProduct?.nameEn || '');
+  const [nameTa, setNameTa] = useState(editingProduct?.nameTa || '');
+  const [categoryId, setCategoryId] = useState(editingProduct?.categoryId || route.params?.categoryId || '');
+  const [price, setPrice] = useState(editingProduct?.price ? editingProduct.price.toString() : '');
+  const [unit, setUnit] = useState(editingProduct?.unit || 'kg');
+  const [gstPercentage, setGstPercentage] = useState(editingProduct?.gstPercentage || 0);
+  const [isGstInclusive, setIsGstInclusive] = useState(editingProduct?.isGstInclusive || false);
+  const [stock, setStock] = useState(editingProduct?.stock ? editingProduct.stock.toString() : '');
+  const [barcode, setBarcode] = useState(editingProduct?.barcode || '');
+  const [imageUri, setImageUri] = useState<string | undefined>(editingProduct?.imageUri || undefined);
   const [isLoadingImage, setIsLoadingImage] = useState(false);
 
   // Generate next product code
@@ -57,10 +59,14 @@ export default function AddProductScreen() {
     return (maxCode + 1).toString();
   };
 
-  // Auto-generate code if empty
+  // Auto-generate code if empty and not editing
   React.useEffect(() => {
-    if (!productCode) {
+    if (!productCode && !editingProduct) {
       setProductCode(getNextProductCode());
+    }
+    
+    if (editingProduct) {
+      navigation.setOptions({ title: 'Edit Product' });
     }
   }, []);
 
@@ -188,12 +194,14 @@ export default function AddProductScreen() {
       Alert.alert('Error', 'Please enter a product code');
       return;
     }
-    // Check for duplicate product code
+    
+    // Check for duplicate product code (exclude current product if editing)
     const existingProduct = state.products.find(p => p.productCode === productCode.trim());
-    if (existingProduct) {
+    if (existingProduct && (!editingProduct || existingProduct.id !== editingProduct.id)) {
       Alert.alert('Error', `Product code "${productCode}" already exists for "${existingProduct.nameEn}"`);
       return;
     }
+
     if (!nameEn.trim()) {
       Alert.alert('Error', 'Please enter product name in English');
       return;
@@ -208,7 +216,7 @@ export default function AddProductScreen() {
     }
 
     try {
-      await addProduct({
+      const productData = {
         productCode: productCode.trim(),
         nameEn: nameEn.trim(),
         nameTa: nameTa.trim() || nameEn.trim(),
@@ -220,14 +228,25 @@ export default function AddProductScreen() {
         stock: stock ? parseInt(stock) : undefined,
         barcode: barcode.trim() || undefined,
         imageUri: imageUri,
-      });
+      };
 
-      Alert.alert('Success', `Product #${productCode} added successfully`, [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      if (editingProduct) {
+        await updateProduct({
+          ...editingProduct,
+          ...productData,
+        });
+        Alert.alert('Success', `Product updated successfully`, [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      } else {
+        await addProduct(productData);
+        Alert.alert('Success', `Product #${productCode} added successfully`, [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      }
     } catch (error) {
-      Alert.alert('Error', 'Failed to add product. Please try again.');
-      console.error('Error adding product:', error);
+      Alert.alert('Error', `Failed to ${editingProduct ? 'update' : 'add'} product. Please try again.`);
+      console.error('Error saving product:', error);
     }
   };
 
@@ -513,7 +532,7 @@ export default function AddProductScreen() {
         {/* Submit Button */}
         <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
           <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
-          <Text style={styles.submitButtonText}>Add Product</Text>
+          <Text style={styles.submitButtonText}>{editingProduct ? 'Update Product' : 'Add Product'}</Text>
         </TouchableOpacity>
 
         <View style={styles.bottomPadding} />

@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import { User, Category, Product, Bill, CartItem, UserRole, ShopSettings, ProductSalesStat } from '../types';
+import { User, Category, Product, Bill, CartItem, UserRole, ShopSettings, ProductSalesStat, Customer, PrintStatus } from '../types';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
@@ -77,7 +77,22 @@ export const initDatabase = async (): Promise<void> => {
         CREATE INDEX IF NOT EXISTS idx_products_price ON products(price);
     `);
 
-    // Create Bills table
+
+    // Create Customers table
+    await database.execAsync(`
+        CREATE TABLE IF NOT EXISTS customers (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            phone TEXT UNIQUE NOT NULL,
+            address TEXT,
+            notes TEXT,
+            createdAt TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+        CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
+    `);
+
+    // Create Bills table (updated schema)
     await database.execAsync(`
         CREATE TABLE IF NOT EXISTS bills (
             id TEXT PRIMARY KEY,
@@ -86,12 +101,38 @@ export const initDatabase = async (): Promise<void> => {
             gstAmount REAL NOT NULL,
             total REAL NOT NULL,
             customerId TEXT,
+            roundOff REAL DEFAULT 0,
+            grandTotal REAL DEFAULT 0,
+            printStatus TEXT DEFAULT 'not_printed',
             createdAt TEXT NOT NULL,
             createdBy TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_bills_createdAt ON bills(createdAt);
         CREATE INDEX IF NOT EXISTS idx_bills_createdBy ON bills(createdBy);
+        CREATE INDEX IF NOT EXISTS idx_bills_customerId ON bills(customerId);
     `);
+
+    // Migrate bills table if needed (for existing app installations)
+    try {
+        const tableInfo = await database.getAllAsync<any>("PRAGMA table_info(bills)");
+        const columnNames = tableInfo.map(c => c.name);
+
+        if (!columnNames.includes('customerId')) {
+            await database.execAsync('ALTER TABLE bills ADD COLUMN customerId TEXT');
+            await database.execAsync('CREATE INDEX IF NOT EXISTS idx_bills_customerId ON bills(customerId)');
+        }
+        if (!columnNames.includes('roundOff')) {
+            await database.execAsync('ALTER TABLE bills ADD COLUMN roundOff REAL DEFAULT 0');
+        }
+        if (!columnNames.includes('grandTotal')) {
+            await database.execAsync('ALTER TABLE bills ADD COLUMN grandTotal REAL DEFAULT 0');
+        }
+        if (!columnNames.includes('printStatus')) {
+            await database.execAsync("ALTER TABLE bills ADD COLUMN printStatus TEXT DEFAULT 'not_printed'");
+        }
+    } catch (e) {
+        console.log('Migration skipped or failed', e);
+    }
 
     // Create Settings table (single row)
     await database.execAsync(`
@@ -103,10 +144,10 @@ export const initDatabase = async (): Promise<void> => {
     `);
 
     // Insert demo data if empty
-    const userCount = await database.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM users');
-    if (userCount?.count === 0) {
-        await insertDemoData(database);
-    }
+    // const userCount = await database.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM users');
+    // if (userCount?.count === 0) {
+    //     await insertDemoData(database);
+    // }
 
     console.log('SQLite database initialized successfully');
 };
@@ -468,11 +509,30 @@ export const getAllBills = async (limit?: number, offset?: number): Promise<Bill
     }
 
     const rows = await database.getAllAsync<any>(query, params);
-    return rows.map(row => ({
-        ...row,
-        items: JSON.parse(row.items),
-        createdAt: new Date(row.createdAt),
+
+    // Fetch customers for bills
+    const billsWithCustomers = await Promise.all(rows.map(async (row) => {
+        let customer: Customer | undefined;
+        if (row.customerId) {
+            const customerRow = await database.getFirstAsync<any>('SELECT * FROM customers WHERE id = ?', [row.customerId]);
+            if (customerRow) {
+                customer = {
+                    ...customerRow,
+                    createdAt: new Date(customerRow.createdAt)
+                };
+            }
+        }
+
+        return {
+            ...row,
+            items: JSON.parse(row.items),
+            printStatus: row.printStatus || 'not_printed',
+            customer,
+            createdAt: new Date(row.createdAt),
+        };
     }));
+
+    return billsWithCustomers;
 };
 
 export const insertBill = async (bill: Bill): Promise<void> => {
@@ -481,8 +541,21 @@ export const insertBill = async (bill: Bill): Promise<void> => {
     await database.withTransactionAsync(async () => {
         // Insert Bill
         await database.runAsync(
-            `INSERT INTO bills (id, items, subtotal, gstAmount, total, customerId, createdAt, createdBy) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [bill.id, JSON.stringify(bill.items), bill.subtotal, bill.gstAmount, bill.total, bill.customerId || null, bill.createdAt.toISOString(), bill.createdBy]
+            `INSERT INTO bills (id, items, subtotal, gstAmount, total, customerId, roundOff, grandTotal, printStatus, createdAt, createdBy) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                bill.id,
+                JSON.stringify(bill.items),
+                bill.subtotal,
+                bill.gstAmount,
+                bill.total,
+                bill.customerId || null,
+                bill.roundOff || 0,
+                bill.grandTotal || bill.total,
+                bill.printStatus || 'not_printed',
+                bill.createdAt.toISOString(),
+                bill.createdBy
+            ]
         );
 
         // Update Product Stock
@@ -524,11 +597,141 @@ export const getBillsByDateRange = async (startDate: Date, endDate: Date): Promi
     return rows.map(row => ({
         ...row,
         items: JSON.parse(row.items),
+        printStatus: row.printStatus || 'not_printed',
         createdAt: new Date(row.createdAt),
     }));
 };
 
+// Update existing bill
+export const updateBill = async (bill: Bill): Promise<void> => {
+    const database = await getDatabase();
+
+    await database.withTransactionAsync(async () => {
+        // 1. Get original bill to revert stock changes
+        const originalBillRow = await database.getFirstAsync<any>('SELECT items FROM bills WHERE id = ?', [bill.id]);
+        if (originalBillRow) {
+            const originalItems: CartItem[] = JSON.parse(originalBillRow.items);
+            // Revert stock for original items (add back quantity)
+            for (const item of originalItems) {
+                if (item.product.id) {
+                    await database.runAsync(
+                        `UPDATE products SET stock = stock + ? WHERE id = ?`,
+                        [item.quantity, item.product.id]
+                    );
+                }
+            }
+        }
+
+        // 2. Update Bill Record
+        await database.runAsync(
+            `UPDATE bills SET items = ?, subtotal = ?, gstAmount = ?, total = ?, customerId = ?, roundOff = ?, grandTotal = ?, printStatus = ? WHERE id = ?`,
+            [
+                JSON.stringify(bill.items),
+                bill.subtotal,
+                bill.gstAmount,
+                bill.total,
+                bill.customerId || null,
+                bill.roundOff || 0,
+                bill.grandTotal || bill.total,
+                // If bill was already printed, updating it might require re-printing, so status might change. 
+                // But usually we keep 'printed' or 'reprinted'. Let's trust the passed bill status or default to 'reprinted' if it was printed.
+                // For now, update whatever is passed, logic handled in AppContext/UI.
+                bill.printStatus || 'not_printed',
+                bill.id
+            ]
+        );
+
+        // 3. Deduct stock for NEW items
+        for (const item of bill.items) {
+            if (item.product.id) {
+                await database.runAsync(
+                    `UPDATE products SET stock = stock - ? WHERE id = ?`,
+                    [item.quantity, item.product.id]
+                );
+            }
+        }
+    });
+};
+
+export const updateBillPrintStatus = async (billId: string, status: PrintStatus): Promise<void> => {
+    const database = await getDatabase();
+    await database.runAsync(
+        'UPDATE bills SET printStatus = ? WHERE id = ?',
+        [status, billId]
+    );
+};
+
+// ============ CUSTOMERS ============
+
+export const getAllCustomers = async (limit: number = 50, offset: number = 0): Promise<Customer[]> => {
+    const database = await getDatabase();
+    const rows = await database.getAllAsync<any>(
+        'SELECT * FROM customers ORDER BY name ASC LIMIT ? OFFSET ?',
+        [limit, offset]
+    );
+    return rows.map(row => ({
+        ...row,
+        createdAt: new Date(row.createdAt),
+    }));
+};
+
+export const getCustomerByPhone = async (phone: string): Promise<Customer | null> => {
+    const database = await getDatabase();
+    const row = await database.getFirstAsync<any>(
+        'SELECT * FROM customers WHERE phone = ?',
+        [phone]
+    );
+    if (!row) return null;
+    return {
+        ...row,
+        createdAt: new Date(row.createdAt),
+    };
+};
+
+export const searchCustomers = async (query: string): Promise<Customer[]> => {
+    const database = await getDatabase();
+    const searchTerm = `%${query}%`;
+    const rows = await database.getAllAsync<any>(
+        'SELECT * FROM customers WHERE name LIKE ? OR phone LIKE ? LIMIT 10',
+        [searchTerm, searchTerm]
+    );
+    return rows.map(row => ({
+        ...row,
+        createdAt: new Date(row.createdAt),
+    }));
+};
+
+export const upsertCustomer = async (customer: Customer): Promise<void> => {
+    const database = await getDatabase();
+    await database.runAsync(
+        `INSERT INTO customers (id, name, phone, address, notes, createdAt)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET 
+            name = excluded.name,
+            phone = excluded.phone,
+            address = excluded.address,
+            notes = excluded.notes`,
+        [customer.id, customer.name, customer.phone, customer.address || null, customer.notes || null, customer.createdAt.toISOString()]
+    );
+};
+
 // ============ UTILITY FUNCTIONS ============
+
+export const clearBusinessData = async (resetStock: boolean = true): Promise<void> => {
+    const database = await getDatabase();
+    await database.withTransactionAsync(async () => {
+        // Clear transaction tables
+        await database.execAsync(`
+            DELETE FROM bills;
+            DELETE FROM customers;
+        `);
+
+        // Reset product stock if requested
+        if (resetStock) {
+            await database.runAsync('UPDATE products SET stock = 0');
+        }
+    });
+};
 
 export const clearAllData = async (): Promise<void> => {
     const database = await getDatabase();
@@ -536,7 +739,7 @@ export const clearAllData = async (): Promise<void> => {
         DELETE FROM bills;
         DELETE FROM products;
         DELETE FROM categories;
-        DELETE FROM users;
+        DELETE FROM users WHERE id != 'superadmin';
         DELETE FROM settings;
     `);
 };
@@ -558,14 +761,9 @@ export const resetAppData = async (): Promise<void> => {
             DELETE FROM bills;
             DELETE FROM products;
             DELETE FROM categories;
-            DELETE FROM users;
+            DELETE FROM users WHERE id != 'superadmin';
             DELETE FROM settings;
         `);
-
-        await database.runAsync(
-            `INSERT INTO users (id, username, phone, role, pin, createdAt) VALUES (?, ?, ?, ?, ?, ?)`,
-            ['superadmin', 'superadmin', '9999999999', 'super_admin', '0000', now]
-        );
     });
 };
 

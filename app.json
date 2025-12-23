@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "Shops Billing App",
-    "slug": "mnv-billings",
+    "name": "EasyBills",
+    "slug": "easybills",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/playstore-icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.jpeg",
+      "image": "./assets/playstore-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#1a1a2e",
       "dark": {
@@ -23,14 +23,14 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.shopsbilling.app"
+      "bundleIdentifier": "com.easybills.app"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/playstore-icon.png",
         "backgroundColor": "#1a1a2e"
       },
-      "package": "com.shopsbilling.app",
+      "package": "com.easybills.app",
       "permissions": [
         "BLUETOOTH",
         "BLUETOOTH_ADMIN",
@@ -38,6 +38,11 @@
         "BLUETOOTH_SCAN",
         "ACCESS_FINE_LOCATION"
       ]
+    },
+    "androidStatusBar": {
+      "barStyle": "light-content",
+      "backgroundColor": "#1a1a2e",
+      "translucent": true
     },
     "web": {
       "favicon": "./assets/favicon.png"

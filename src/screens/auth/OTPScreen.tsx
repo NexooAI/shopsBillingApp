@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../theme';
 import { useApp } from '../../context/AppContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 
 type OTPScreenRouteProp = RouteProp<RootStackParamList, 'OTP'>;
@@ -19,6 +20,7 @@ export default function OTPScreen() {
   const navigation = useNavigation();
   const route = useRoute<OTPScreenRouteProp>();
   const { loginWithPhone, state } = useApp();
+  const { t } = useLanguage();
   
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [timer, setTimer] = useState(30);
@@ -59,7 +61,7 @@ export default function OTPScreen() {
   const handleVerify = () => {
     const otpString = otp.join('');
     if (otpString.length !== 6) {
-      Alert.alert('Error', 'Please enter the complete OTP');
+      Alert.alert(t('common.error'), t('auth.enterCompleteOtp'));
       return;
     }
 
@@ -77,7 +79,7 @@ export default function OTPScreen() {
   const handleResendOTP = () => {
     setTimer(30);
     setCanResend(false);
-    Alert.alert('OTP Sent', `A new OTP has been sent to ${route.params.phone}`);
+    Alert.alert(t('auth.otpSent'), `${t('auth.otpSentMsg')} ${route.params.phone}`);
   };
 
   return (
@@ -89,9 +91,9 @@ export default function OTPScreen() {
         </View>
 
         {/* Title */}
-        <Text style={styles.title}>Verify OTP</Text>
+        <Text style={styles.title}>{t('auth.verifyOtp')}</Text>
         <Text style={styles.subtitle}>
-          Enter the 6-digit code sent to{'\n'}
+          {t('auth.enterOtpCode')}{'\n'}
           <Text style={styles.phone}>{route.params.phone}</Text>
         </Text>
 
@@ -100,7 +102,7 @@ export default function OTPScreen() {
           {otp.map((digit, index) => (
             <TextInput
               key={index}
-              ref={(ref) => (inputRefs.current[index] = ref)}
+              ref={(ref) => { inputRefs.current[index] = ref; }}
               style={[styles.otpInput, digit && styles.otpInputFilled]}
               value={digit}
               onChangeText={(value) => handleOTPChange(value, index)}
@@ -116,18 +118,18 @@ export default function OTPScreen() {
         <View style={styles.timerContainer}>
           {canResend ? (
             <TouchableOpacity onPress={handleResendOTP}>
-              <Text style={styles.resendText}>Resend OTP</Text>
+              <Text style={styles.resendText}>{t('auth.resendOtp')}</Text>
             </TouchableOpacity>
           ) : (
             <Text style={styles.timerText}>
-              Resend OTP in <Text style={styles.timerCount}>{timer}s</Text>
+              {t('auth.resendOtpIn')} <Text style={styles.timerCount}>{timer}s</Text>
             </Text>
           )}
         </View>
 
         {/* Verify Button */}
         <TouchableOpacity style={styles.verifyButton} onPress={handleVerify}>
-          <Text style={styles.verifyButtonText}>Verify & Continue</Text>
+          <Text style={styles.verifyButtonText}>{t('auth.verifyContinue')}</Text>
           <Ionicons name="arrow-forward" size={20} color={colors.primary} />
         </TouchableOpacity>
 
@@ -135,7 +137,7 @@ export default function OTPScreen() {
         <View style={styles.demoNote}>
           <Ionicons name="information-circle" size={16} color={colors.info} />
           <Text style={styles.demoNoteText}>
-            Demo: Enter any 6-digit code to proceed
+            {t('auth.demoNote')}
           </Text>
         </View>
       </View>

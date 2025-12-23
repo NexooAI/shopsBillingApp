@@ -12,6 +12,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors, spacing, borderRadius, fontSize, fontWeight, shadows } from '../../theme';
 import { useApp } from '../../context/AppContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 
 const { width } = Dimensions.get('window');
@@ -62,6 +63,7 @@ function StatCard({ icon, title, value, color }: StatCardProps) {
 export default function DashboardScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { state, logout, getDailySales } = useApp();
+  const { t, toggleLanguage } = useLanguage();
   const isSuperAdmin = state.user?.role === 'super_admin';
   const isAdmin = state.user?.role === 'admin' || isSuperAdmin;
   const dailySales = getDailySales();
@@ -70,43 +72,43 @@ export default function DashboardScreen() {
     ? [
         {
           icon: 'grid-outline' as const,
-          title: 'Categories',
-          subtitle: 'Manage categories',
+          title: t('dashboard.categories'),
+          subtitle: t('dashboard.manageCategories'),
           color: colors.categories.grocery,
           onPress: () => navigation.navigate('CategoryManagement'),
         },
         {
           icon: 'cube-outline' as const,
-          title: 'Products',
-          subtitle: 'Add & edit',
+          title: t('dashboard.products'),
+          subtitle: t('dashboard.analysis'),
           color: colors.categories.vegetables,
           onPress: () => navigation.navigate('ProductManagement'),
         },
         {
           icon: 'people-outline' as const,
-          title: 'Users',
-          subtitle: 'Manage staff',
+          title: t('dashboard.userMgmt'),
+          subtitle: t('dashboard.manageStaff'),
           color: colors.categories.fruits,
           onPress: () => navigation.navigate('UserManagement'),
         },
         {
           icon: 'cloud-upload-outline' as const,
-          title: 'Bulk Upload',
-          subtitle: 'Excel import',
+          title: t('dashboard.bulkUpload'),
+          subtitle: t('dashboard.excelImport'),
           color: colors.categories.dairy,
           onPress: () => navigation.navigate('BulkUpload'),
         },
         {
           icon: 'stats-chart-outline' as const,
-          title: 'Product Sales',
-          subtitle: 'Analysis',
+          title: t('dashboard.productSales'),
+          subtitle: t('dashboard.analysis'),
           color: colors.categories.beverages,
           onPress: () => navigation.navigate('ProductSalesStats'),
         },
         {
           icon: 'list-outline' as const,
-          title: 'Inventory',
-          subtitle: 'Status & Value',
+          title: t('dashboard.inventory'),
+          subtitle: t('dashboard.statusValue'),
           color: colors.categories.snacks,
           onPress: () => navigation.navigate('InventoryStatus'),
         },
@@ -114,15 +116,15 @@ export default function DashboardScreen() {
     : [
         {
           icon: 'cart-outline' as const,
-          title: 'New Bill',
-          subtitle: 'Start billing',
+          title: t('dashboard.newBill'),
+          subtitle: t('dashboard.startBilling'),
           color: colors.accent,
           onPress: () => navigation.navigate('Main', { screen: 'Billing' } as any),
         },
         {
           icon: 'grid-outline' as const,
-          title: 'Products',
-          subtitle: 'View catalog',
+          title: t('dashboard.products'),
+          subtitle: t('dashboard.viewCatalog'),
           color: colors.secondary,
           onPress: () => navigation.navigate('Main', { screen: 'Products' } as any),
         },
@@ -134,10 +136,16 @@ export default function DashboardScreen() {
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View>
-            <Text style={styles.greeting}>Welcome back,</Text>
+            <Text style={styles.greeting}>{t('dashboard.welcome')},</Text>
             <Text style={styles.userName}>{state.user?.username || 'User'}</Text>
           </View>
           <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={toggleLanguage}
+            >
+              <Ionicons name="language" size={24} color={colors.white} />
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.headerButton}
               onPress={() => navigation.navigate('Settings')}
@@ -171,29 +179,29 @@ export default function DashboardScreen() {
 
       {/* Today's Stats */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Today's Overview</Text>
+        <Text style={styles.sectionTitle}>{t('dashboard.todayOverview')}</Text>
         <View style={styles.statsGrid}>
           <StatCard
             icon="cash-outline"
-            title="Revenue"
+            title={t('dashboard.revenue')}
             value={`₹${dailySales.totalRevenue.toFixed(0)}`}
             color={colors.success}
           />
           <StatCard
             icon="receipt-outline"
-            title="Bills"
+            title={t('dashboard.bills')}
             value={dailySales.totalCustomers.toString()}
             color={colors.info}
           />
           <StatCard
             icon="cube-outline"
-            title="Products"
+            title={t('dashboard.products')}
             value={state.products.length.toString()}
             color={colors.warning}
           />
           <StatCard
             icon="layers-outline"
-            title="Categories"
+            title={t('dashboard.categories')}
             value={state.categories.length.toString()}
             color={colors.secondary}
           />
@@ -202,7 +210,7 @@ export default function DashboardScreen() {
 
       {/* Quick Actions */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <Text style={styles.sectionTitle}>{t('dashboard.quickActions')}</Text>
         <View style={styles.quickActionsGrid}>
           {quickActions.map((action, index) => (
             <QuickActionCard key={index} {...action} />
@@ -213,7 +221,7 @@ export default function DashboardScreen() {
       {/* Recent Activity (Admin only) */}
       {isAdmin && dailySales.bills.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recent Bills</Text>
+          <Text style={styles.sectionTitle}>{t('dashboard.recentBills')}</Text>
           <View style={styles.recentBills}>
             {dailySales.bills.slice(-3).reverse().map((bill) => (
               <TouchableOpacity
@@ -237,14 +245,14 @@ export default function DashboardScreen() {
       {/* Admin Quick Links */}
       {isAdmin && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Admin Panel</Text>
+          <Text style={styles.sectionTitle}>{t('dashboard.adminPanel')}</Text>
           <View style={styles.adminLinks}>
             <TouchableOpacity
               style={styles.adminLink}
               onPress={() => navigation.navigate('CategoryManagement')}
             >
               <Ionicons name="folder-outline" size={20} color={colors.primary} />
-              <Text style={styles.adminLinkText}>Category Management</Text>
+              <Text style={styles.adminLinkText}>{t('dashboard.categoryMgmt')}</Text>
               <Ionicons name="chevron-forward" size={20} color={colors.gray[400]} />
             </TouchableOpacity>
             <TouchableOpacity
@@ -252,7 +260,7 @@ export default function DashboardScreen() {
               onPress={() => navigation.navigate('ProductManagement')}
             >
               <Ionicons name="pricetag-outline" size={20} color={colors.primary} />
-              <Text style={styles.adminLinkText}>Product Management</Text>
+              <Text style={styles.adminLinkText}>{t('dashboard.productMgmt')}</Text>
               <Ionicons name="chevron-forward" size={20} color={colors.gray[400]} />
             </TouchableOpacity>
             <TouchableOpacity
@@ -260,7 +268,7 @@ export default function DashboardScreen() {
               onPress={() => navigation.navigate('UserManagement')}
             >
               <Ionicons name="people-outline" size={20} color={colors.primary} />
-              <Text style={styles.adminLinkText}>User Management</Text>
+              <Text style={styles.adminLinkText}>{t('dashboard.userMgmt')}</Text>
               <Ionicons name="chevron-forward" size={20} color={colors.gray[400]} />
             </TouchableOpacity>
           </View>

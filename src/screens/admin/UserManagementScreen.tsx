@@ -26,7 +26,7 @@ interface UserCardProps {
 function UserCard({ user, isCurrentUser, onDelete }: UserCardProps) {
   const isSuperAdmin = user.role === 'super_admin';
   const isAdmin = user.role === 'admin';
-  const isMaster = user.id === 'superadmin';
+  const isMaster = user.id === '';
 
   const getAvatarIcon = () => {
     if (isSuperAdmin) return 'shield-checkmark';

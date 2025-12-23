@@ -13,11 +13,12 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as XLSX from 'xlsx';
+import * as Database from '../../services/sqliteDatabase';
 import { colors, spacing, borderRadius, fontSize, fontWeight, shadows } from '../../theme';
 import { useApp } from '../../context/AppContext';
 
 export default function BulkUploadScreen() {
-  const { state, addProductsBulk } = useApp();
+  const { state, addProductsBulk, refreshData } = useApp();
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -64,6 +65,67 @@ export default function BulkUploadScreen() {
           return;
         }
 
+        // Helper to normalize string for comparison
+        const normalize = (str: any) => str?.toString().toLowerCase().trim() || '';
+
+        // Auto-detect header row
+        // Scan first 20 rows to find the one with the most matching keywords
+        let headerRowIndex = 0;
+        let maxKeywordsFound = 0;
+        
+        const knownKeywords = [
+          'product code', 'code', 'id',
+          'name', 'english', 'product',
+          'category',
+          'price', 'rate', 'mrp',
+          'unit',
+          'gst', 'tax',
+          'stock', 'qty',
+          'barcode'
+        ];
+
+        for (let i = 0; i < Math.min(jsonData.length, 20); i++) {
+          const row = jsonData[i];
+          if (!row || !Array.isArray(row)) continue;
+          
+          let keywordsFound = 0;
+          row.forEach(cell => {
+             const cellStr = normalize(cell);
+             if (knownKeywords.some(k => cellStr.includes(k))) {
+               keywordsFound++;
+             }
+          });
+
+          if (keywordsFound > maxKeywordsFound) {
+            maxKeywordsFound = keywordsFound;
+            headerRowIndex = i;
+          }
+        }
+
+        // If we found a good header row (at least 2 matches), use it. Otherwise default to 0.
+        if (maxKeywordsFound < 2) {
+           headerRowIndex = 0;
+        }
+
+        // Parse headers from the detected row
+        const headers = (jsonData[headerRowIndex] || []).map((h: any) => normalize(h));
+        
+        const getColIndex = (keywords: string[]) => {
+          return headers.findIndex(h => keywords.some(k => h === k || h?.includes(k)));
+        };
+
+        const idxCode = getColIndex(['product code', 'code', 'id']);
+        const idxNameEn = getColIndex(['name (english)', 'product name', 'english name']);
+        const idxNameTa = getColIndex(['name (tamil)', 'tamil name']);
+        const idxCategory = getColIndex(['category', 'category name']);
+        const idxPrice = getColIndex(['price', 'rate', 'mrp']);
+        const idxUnit = getColIndex(['unit', 'measurement']);
+        const idxGst = getColIndex(['gst', 'tax']);
+        const idxGstInclusive = getColIndex(['gst inclusive', 'tax inclusive']);
+        const idxStock = getColIndex(['stock', 'quantity', 'qty']);
+        const idxBarcode = getColIndex(['barcode']);
+        const idxImage = getColIndex(['image', 'url']);
+
         // Skip header row and parse products
         const products: any[] = [];
         const errors: string[] = [];
@@ -78,30 +140,40 @@ export default function BulkUploadScreen() {
           .filter(code => !isNaN(code));
         let nextAutoCode = (existingNumericCodes.length > 0 ? Math.max(...existingNumericCodes) : 100) + 1;
 
-        for (let i = 1; i < jsonData.length; i++) {
-          const row = jsonData[i];
-          if (!row || row.length === 0 || !row[0]) {
-             // If row is empty or just first cell is empty, check if other cells have data
-             if (!row || row.length === 0 || (!row[1] && !row[3] && !row[4])) continue;
-          }
+        // Initialize category map with existing categories
+        const categoryMap = new Map<string, string>();
+        state.categories.forEach(c => {
+            categoryMap.set(c.nameEn.toLowerCase(), c.id);
+        });
 
-          let productCode = row[0]?.toString().trim();
+        const newCategoriesToCreate = new Set<string>();
+
+        // Start parsing from the row AFTER the header
+        for (let i = headerRowIndex + 1; i < jsonData.length; i++) {
+          const row = jsonData[i];
+          if (!row || row.length === 0) continue;
+
+          // Check if row has data
+          const hasData = row.some((cell: any) => cell !== undefined && cell !== null && cell !== '');
+          if (!hasData) continue;
+
+          let productCode = idxCode !== -1 && row[idxCode] ? row[idxCode].toString().trim() : '';
           
           // Auto-generate code if missing
           if (!productCode) {
              productCode = String(nextAutoCode++);
           }
 
-          const nameEn = row[1]?.toString().trim();
-          const nameTa = row[2]?.toString().trim() || nameEn;
-          const categoryName = row[3]?.toString().trim();
-          const price = parseFloat(row[4]) || 0;
-          const unit = row[5]?.toString().trim() || 'piece';
-          const gstPercentage = parseFloat(row[6]) || 0;
-          const isGstInclusive = row[7]?.toString().toLowerCase() === 'yes';
-          const stock = parseInt(row[8]) || undefined;
-          const barcode = row[9]?.toString().trim() || undefined;
-          const imageUri = row[10]?.toString().trim() || undefined;
+          const nameEn = idxNameEn !== -1 ? row[idxNameEn]?.toString().trim() : undefined;
+          const nameTa = idxNameTa !== -1 ? row[idxNameTa]?.toString().trim() : (nameEn || '');
+          const categoryName = idxCategory !== -1 ? row[idxCategory]?.toString().trim() : 'General';
+          const price = idxPrice !== -1 ? (parseFloat(row[idxPrice]) || 0) : 0;
+          const unit = idxUnit !== -1 ? row[idxUnit]?.toString().trim() : 'piece';
+          const gstPercentage = idxGst !== -1 ? (parseFloat(row[idxGst]) || 0) : 0;
+          const isGstInclusive = idxGstInclusive !== -1 ? row[idxGstInclusive]?.toString().toLowerCase() === 'yes' : false;
+          const stock = idxStock !== -1 ? (parseInt(row[idxStock]) || undefined) : undefined;
+          const barcode = idxBarcode !== -1 ? row[idxBarcode]?.toString().trim() : undefined;
+          const imageUri = idxImage !== -1 ? row[idxImage]?.toString().trim() : undefined;
 
           // Validate required fields
           // Product Code is now guaranteed to exist (either provided or auto-generated)
@@ -113,8 +185,15 @@ export default function BulkUploadScreen() {
           }
           // Check for duplicate product code in existing products
           if (existingCodes.has(productCode)) {
-            errors.push(`Row ${i + 1}: Product code "${productCode}" already exists`);
-            continue;
+            // If code was auto-generated, try next one
+            if (idxCode === -1 || !row[idxCode]) {
+                 while (existingCodes.has(productCode) || usedCodes.has(productCode)) {
+                     productCode = String(nextAutoCode++);
+                 }
+            } else {
+                errors.push(`Row ${i + 1}: Product code "${productCode}" already exists`);
+                continue;
+            }
           }
           if (!nameEn) {
             errors.push(`Row ${i + 1}: Missing product name`);
@@ -125,14 +204,15 @@ export default function BulkUploadScreen() {
             continue;
           }
 
-          // Find category ID
-          const category = state.categories.find(
-            c => c.nameEn.toLowerCase() === categoryName?.toLowerCase()
-          );
+          // Handle Category
+          const normalizedCatName = categoryName.trim();
+          let categoryId = categoryMap.get(normalizedCatName.toLowerCase());
 
-          if (!category) {
-            errors.push(`Row ${i + 1}: Category "${categoryName}" not found for "${nameEn}"`);
-            continue;
+          if (!categoryId) {
+             // Mark as new category to be created
+             newCategoriesToCreate.add(normalizedCatName);
+             // We will assign a temporary placeholder including the name, to be replaced later
+             categoryId = `NEW:${normalizedCatName}`; 
           }
 
           usedCodes.add(productCode);
@@ -140,7 +220,7 @@ export default function BulkUploadScreen() {
             productCode,
             nameEn,
             nameTa,
-            categoryId: category.id,
+            categoryId, 
             price,
             unit,
             gstPercentage,
@@ -164,18 +244,60 @@ export default function BulkUploadScreen() {
           return;
         }
 
+        const newCatArray = Array.from(newCategoriesToCreate);
+
         // Confirm import
         Alert.alert(
           'Confirm Import',
-          `Found ${products.length} valid products.${errors.length > 0 ? `\n\n${errors.length} rows had errors and were skipped.` : ''}\n\nDo you want to import these products?`,
+          `Found ${products.length} valid products.${errors.length > 0 ? `\n\n${errors.length} rows had errors and were skipped.` : ''}\n${newCatArray.length > 0 ? `\n${newCatArray.length} new categories will be created: ${newCatArray.slice(0, 3).join(', ')}${newCatArray.length > 3 ? '...' : ''}` : ''}\n\nDo you want to import these products?`,
           [
             { text: 'Cancel', style: 'cancel', onPress: () => setSelectedFile(null) },
             {
               text: 'Import',
-              onPress: () => {
-                addProductsBulk(products);
-                setSelectedFile(null);
-                Alert.alert('Success', `${products.length} products imported successfully!`);
+              onPress: async () => {
+                setIsProcessing(true);
+                try {
+                    const nameToIdMap = new Map<string, string>();
+
+                    // 1. Create new categories
+                    for (const catName of newCatArray) {
+                        const newId = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                        const newCat = {
+                            id: newId,
+                            nameEn: catName,
+                            nameTa: catName,
+                            icon: 'grid-outline', // Default icon
+                            color: '#4A90E2',     // Default color (primary blue-ish)
+                            createdAt: new Date()
+                        };
+                        
+                        await Database.insertCategory(newCat);
+                        nameToIdMap.set(catName, newId);
+                    }
+
+                    // 2. Fix product category IDs
+                    const finalProducts = products.map(p => {
+                        if (p.categoryId.startsWith('NEW:')) {
+                            const name = p.categoryId.substring(4);
+                            return { ...p, categoryId: nameToIdMap.get(name) || 'default' };
+                        }
+                        return p;
+                    });
+                    
+                    // 3. Add products
+                    await addProductsBulk(finalProducts);
+                    
+                    // 4. Force reload to show new categories
+                    await refreshData();
+                    
+                    setSelectedFile(null);
+                    Alert.alert('Success', `${products.length} products imported successfully! (Please reload if categories don't appear immediately)`);
+                    
+                } catch (error) {
+                    console.error(error);
+                    setIsProcessing(false);
+                    Alert.alert('Error', 'Failed to import products.');
+                }
               },
             },
           ]

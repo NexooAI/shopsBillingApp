@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../theme';
 import { useApp } from '../../context/AppContext';
+import { useLanguage } from '../../context/LanguageContext';
+
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function InitialSetupScreen() {
     const { configureShop } = useApp();
     const navigation = useNavigation();
+    const { t } = useLanguage();
 
     const [shopName, setShopName] = useState('');
     const [address, setAddress] = useState('');
@@ -32,11 +36,11 @@ export default function InitialSetupScreen() {
 
     const saveSettings = async () => {
         if (!shopName.trim() || !address.trim() || !phone.trim() || phone.length < 10) {
-            Alert.alert('Error', 'Please enter shop name, address, and valid phone number');
+            Alert.alert(t('common.error'), t('setup.enterDetails'));
             return;
         }
         if (!adminUsername.trim() || !adminPassword.trim()) {
-            Alert.alert('Error', 'Please enter admin username and password');
+            Alert.alert(t('common.error'), t('setup.enterAdmin'));
             return;
         }
         setIsSaving(true);
@@ -51,7 +55,7 @@ export default function InitialSetupScreen() {
             });
         } catch (error) {
             console.error('Error saving setup:', error);
-            Alert.alert('Error', 'Failed to save setup. Please try again.');
+            Alert.alert(t('common.error'), t('setup.saveFailed'));
         } finally {
             setIsSaving(false);
         }
@@ -59,15 +63,15 @@ export default function InitialSetupScreen() {
 
     const handleSave = async () => {
         await saveSettings();
-        Alert.alert('Success', 'Setup completed. Please login with your admin credentials.', [
+        Alert.alert(t('common.success'), t('setup.completed'), [
             { text: 'OK', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] }) },
         ]);
     };
 
     const handleSaveAndRestart = async () => {
         await saveSettings();
-        Alert.alert('Success', 'Setup saved. Restart the app to continue.', [
-            { text: 'Restart', onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] }) },
+        Alert.alert(t('common.success'), t('setup.completed'), [
+            { text: t('setup.saveRestart'), onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Login' as never }] }) },
         ]);
     };
 
@@ -94,86 +98,93 @@ export default function InitialSetupScreen() {
     };
 
     return (
-        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-            <Text style={styles.title}>Well Come Billing Application</Text>
-            <Text style={styles.subtitle}>Enter your shop details and admin credentials</Text>
+        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+            <KeyboardAvoidingView 
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={{ flex: 1 }}
+            >
+                <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+                <Text style={styles.title}>{t('setup.welcomeTitle')}</Text>
+                <Text style={styles.subtitle}>{t('setup.subtitle')}</Text>
 
-            <Text style={styles.label}>Shop Name *</Text>
-            <TextInput
-                style={styles.input}
-                placeholder="Enter shop name"
-                placeholderTextColor={colors.gray[400]}
-                value={shopName}
-                onChangeText={setShopName}
-            />
+                <Text style={styles.label}>{t('setup.shopNameLabel')}</Text>
+                <TextInput
+                    style={styles.input}
+                    placeholder={t('setup.shopNamePlace')}
+                    placeholderTextColor={colors.gray[400]}
+                    value={shopName}
+                    onChangeText={setShopName}
+                />
 
-            <Text style={styles.label}>Address *</Text>
-            <TextInput
-                style={[styles.input, styles.multiline]}
-                placeholder="Enter shop address"
-                placeholderTextColor={colors.gray[400]}
-                value={address}
-                onChangeText={setAddress}
-                multiline
-                numberOfLines={3}
-            />
+                <Text style={styles.label}>{t('setup.addressLabel')}</Text>
+                <TextInput
+                    style={[styles.input, styles.multiline]}
+                    placeholder={t('setup.addressPlace')}
+                    placeholderTextColor={colors.gray[400]}
+                    value={address}
+                    onChangeText={setAddress}
+                    multiline
+                    numberOfLines={3}
+                />
 
-            <Text style={styles.label}>Phone *</Text>
-            <TextInput
-                style={styles.input}
-                placeholder="10-digit phone"
-                placeholderTextColor={colors.gray[400]}
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-                maxLength={10}
-            />
+                <Text style={styles.label}>{t('setup.phoneLabel')}</Text>
+                <TextInput
+                    style={styles.input}
+                    placeholder={t('setup.phonePlace')}
+                    placeholderTextColor={colors.gray[400]}
+                    value={phone}
+                    onChangeText={setPhone}
+                    keyboardType="phone-pad"
+                    maxLength={10}
+                />
 
-            <View style={styles.logoRow}>
-                <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>Logo (optional)</Text>
-                    <TouchableOpacity style={styles.logoButton} onPress={pickLogo}>
-                        <Ionicons name="image-outline" size={20} color={colors.white} />
-                        <Text style={styles.logoButtonText}>Choose Image</Text>
+                <View style={styles.logoRow}>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.label}>{t('setup.logoLabel')}</Text>
+                        <TouchableOpacity style={styles.logoButton} onPress={pickLogo}>
+                            <Ionicons name="image-outline" size={20} color={colors.white} />
+                            <Text style={styles.logoButtonText}>{t('setup.chooseImage')}</Text>
+                        </TouchableOpacity>
+                    </View>
+                    {logoUri && <Image source={{ uri: logoUri }} style={styles.logoPreview} />}
+                </View>
+
+                <View style={styles.divider} />
+
+                <Text style={styles.sectionTitle}>{t('setup.adminCredsSection')}</Text>
+
+                <Text style={styles.label}>{t('setup.adminUserLabel')}</Text>
+                <TextInput
+                    style={styles.input}
+                    placeholder={t('setup.adminUserPlace')}
+                    placeholderTextColor={colors.gray[400]}
+                    value={adminUsername}
+                    onChangeText={setAdminUsername}
+                    autoCapitalize="none"
+                />
+
+                <Text style={styles.label}>{t('setup.adminPassLabel')}</Text>
+                <TextInput
+                    style={styles.input}
+                    placeholder={t('setup.adminPassPlace')}
+                    placeholderTextColor={colors.gray[400]}
+                    value={adminPassword}
+                    onChangeText={setAdminPassword}
+                    secureTextEntry
+                />
+
+                <View style={styles.buttonRow}>
+                    <TouchableOpacity style={[styles.saveButton, isSaving && styles.disabled]} disabled={isSaving} onPress={handleSaveAndRestart}>
+                        <Text style={styles.saveButtonText}>{isSaving ? t('setup.saving') : t('setup.saveRestart')}</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={[styles.cancelButton, isSaving && styles.disabled]} disabled={isSaving} onPress={handleCancel}>
+                        <Text style={styles.cancelButtonText}>{t('setup.cancelDemo')}</Text>
                     </TouchableOpacity>
                 </View>
-                {logoUri && <Image source={{ uri: logoUri }} style={styles.logoPreview} />}
-            </View>
-
-            <View style={styles.divider} />
-
-            <Text style={styles.sectionTitle}>Admin Credentials</Text>
-
-            <Text style={styles.label}>Admin Username *</Text>
-            <TextInput
-                style={styles.input}
-                placeholder="Admin username"
-                placeholderTextColor={colors.gray[400]}
-                value={adminUsername}
-                onChangeText={setAdminUsername}
-                autoCapitalize="none"
-            />
-
-            <Text style={styles.label}>Admin Password *</Text>
-            <TextInput
-                style={styles.input}
-                placeholder="Admin password"
-                placeholderTextColor={colors.gray[400]}
-                value={adminPassword}
-                onChangeText={setAdminPassword}
-                secureTextEntry
-            />
-
-            <View style={styles.buttonRow}>
-                <TouchableOpacity style={[styles.saveButton, isSaving && styles.disabled]} disabled={isSaving} onPress={handleSaveAndRestart}>
-                    <Text style={styles.saveButtonText}>{isSaving ? 'Saving...' : 'Save & Restart'}</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity style={[styles.cancelButton, isSaving && styles.disabled]} disabled={isSaving} onPress={handleCancel}>
-                    <Text style={styles.cancelButtonText}>Cancel (Use Demo Defaults)</Text>
-                </TouchableOpacity>
-            </View>
-        </ScrollView>
+            </ScrollView>
+            </KeyboardAvoidingView>
+        </SafeAreaView>
     );
 }
 
@@ -182,7 +193,7 @@ const styles = StyleSheet.create({
         padding: spacing.lg,
         backgroundColor: colors.background,
         flexGrow: 1,
-        justifyContent: 'center',
+        // justifyContent: 'center', // Removed to allow proper scrolling
     },
     title: {
         fontSize: fontSize.xxl,
@@ -296,5 +307,3 @@ const styles = StyleSheet.create({
         opacity: 0.7,
     },
 });
-
-

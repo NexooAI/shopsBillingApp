@@ -11,11 +11,13 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { colors, spacing, borderRadius, fontSize, fontWeight, shadows } from '../../theme';
+import { useLanguage } from '../../context/LanguageContext';
 import { getProductSalesStats } from '../../services/sqliteDatabase';
 import { ProductSalesStat } from '../../types';
 
 export default function ProductSalesStatsScreen() {
   const navigation = useNavigation();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<ProductSalesStat[]>([]);
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month'>('today');
@@ -56,7 +58,7 @@ export default function ProductSalesStatsScreen() {
       </View>
       <View style={styles.productInfo}>
         <Text style={styles.productName}>{item.productName}</Text>
-        <Text style={styles.productQty}>{item.quantitySold} units sold</Text>
+        <Text style={styles.productQty}>{item.quantitySold} {t('sales.unitsSold')}</Text>
       </View>
       <View style={styles.revenueContainer}>
         <Text style={styles.revenueText}>₹{item.totalRevenue.toFixed(0)}</Text>
@@ -70,7 +72,7 @@ export default function ProductSalesStatsScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
-        <Text style={styles.title}>Product Sales Analysis</Text>
+        <Text style={styles.title}>{t('sales.productAnalysis')}</Text>
       </View>
 
       <View style={styles.filterContainer}>
@@ -78,19 +80,19 @@ export default function ProductSalesStatsScreen() {
           style={[styles.filterChip, dateRange === 'today' && styles.activeFilter]}
           onPress={() => setDateRange('today')}
         >
-          <Text style={[styles.filterText, dateRange === 'today' && styles.activeFilterText]}>Today</Text>
+          <Text style={[styles.filterText, dateRange === 'today' && styles.activeFilterText]}>{t('sales.today')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.filterChip, dateRange === 'week' && styles.activeFilter]}
           onPress={() => setDateRange('week')}
         >
-          <Text style={[styles.filterText, dateRange === 'week' && styles.activeFilterText]}>Last 7 Days</Text>
+          <Text style={[styles.filterText, dateRange === 'week' && styles.activeFilterText]}>{t('sales.last7Days')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.filterChip, dateRange === 'month' && styles.activeFilter]}
           onPress={() => setDateRange('month')}
         >
-          <Text style={[styles.filterText, dateRange === 'month' && styles.activeFilterText]}>Last 30 Days</Text>
+          <Text style={[styles.filterText, dateRange === 'month' && styles.activeFilterText]}>{t('sales.last30Days')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -101,7 +103,7 @@ export default function ProductSalesStatsScreen() {
       ) : stats.length === 0 ? (
         <View style={styles.centerContainer}>
           <Ionicons name="stats-chart-outline" size={48} color={colors.text.secondary} />
-          <Text style={styles.emptyText}>No sales data for this period</Text>
+          <Text style={styles.emptyText}>{t('sales.noSalesData')}</Text>
         </View>
       ) : (
         <FlatList

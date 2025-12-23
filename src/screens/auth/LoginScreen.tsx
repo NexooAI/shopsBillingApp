@@ -16,6 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../theme';
 import { useApp } from '../../context/AppContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -23,6 +24,7 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 export default function LoginScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { login, loginWithPhone, state } = useApp();
+  const { t } = useLanguage();
   const shopName = state.settings?.shopName || 'ShopBill Pro';
   const logoUri = state.settings?.logoUri;
 
@@ -36,7 +38,7 @@ export default function LoginScreen() {
 
   const handleUsernameLogin = () => {
     if (!username.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please enter username and password');
+      Alert.alert(t('common.error'), t('auth.enterCreds'));
       return;
     }
     setIsLoading(true);
@@ -44,18 +46,18 @@ export default function LoginScreen() {
       const success = login(username, password);
       setIsLoading(false);
       if (!success) {
-        Alert.alert('Error', 'Invalid credentials.\n\nTry:\n• Super Admin: superadmin/superadmin123\n• Admin: admin/admin123\n• Staff: user/user123');
+        Alert.alert(t('common.error'), t('auth.invalidCreds'));
       }
     }, 500);
   };
 
   const handlePhoneLogin = () => {
     if (!phone.trim() || phone.length < 10) {
-      Alert.alert('Error', 'Please enter a valid 10-digit phone number');
+      Alert.alert(t('common.error'), t('auth.invalidPhone'));
       return;
     }
     if (!pin.trim() || pin.length < 4) {
-      Alert.alert('Error', 'Please enter a valid 4-digit PIN');
+      Alert.alert(t('common.error'), t('auth.invalidPin'));
       return;
     }
     setIsLoading(true);
@@ -63,14 +65,14 @@ export default function LoginScreen() {
       const success = await loginWithPhone(phone, pin);
       setIsLoading(false);
       if (!success) {
-        Alert.alert('Error', 'Invalid phone or PIN.\n\nTry:\n• Super Admin: 9999999999/0000\n• Admin: 8888888888/1234\n• Staff: 7777777777/4321');
+        Alert.alert(t('common.error'), t('auth.invalidPhoneOrPin'));
       }
     }, 500);
   };
 
   const handleSendOTP = () => {
     if (!phone.trim() || phone.length < 10) {
-      Alert.alert('Error', 'Please enter a valid 10-digit phone number');
+      Alert.alert(t('common.error'), t('auth.invalidPhone'));
       return;
     }
     navigation.navigate('OTP', { phone });
@@ -95,7 +97,7 @@ export default function LoginScreen() {
             )}
           </View>
           <Text style={styles.appName}>{shopName}</Text>
-          <Text style={styles.tagline}>Smart Billing Made Simple</Text>
+          <Text style={styles.tagline}>{t('auth.tagline')}</Text>
         </View>
 
         {/* Login Method Toggle */}
@@ -118,7 +120,7 @@ export default function LoginScreen() {
                 loginMethod === 'username' && styles.toggleTextActive,
               ]}
             >
-              Username
+              {t('auth.usernameToggle')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -139,7 +141,7 @@ export default function LoginScreen() {
                 loginMethod === 'phone' && styles.toggleTextActive,
               ]}
             >
-              Phone + PIN
+              {t('auth.phoneToggle')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -152,7 +154,7 @@ export default function LoginScreen() {
                 <Ionicons name="person-outline" size={20} color={colors.gray[500]} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Username"
+                  placeholder={t('auth.usernamePlaceholder')}
                   placeholderTextColor={colors.gray[400]}
                   value={username}
                   onChangeText={setUsername}
@@ -164,7 +166,7 @@ export default function LoginScreen() {
                 <Ionicons name="lock-closed-outline" size={20} color={colors.gray[500]} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Password"
+                  placeholder={t('auth.passwordPlaceholder')}
                   placeholderTextColor={colors.gray[400]}
                   value={password}
                   onChangeText={setPassword}
@@ -185,7 +187,7 @@ export default function LoginScreen() {
                 disabled={isLoading}
               >
                 <Text style={styles.loginButtonText}>
-                  {isLoading ? 'Signing in...' : 'Sign In'}
+                  {isLoading ? t('auth.signingIn') : t('auth.signIn')}
                 </Text>
               </TouchableOpacity>
             </>
@@ -195,7 +197,7 @@ export default function LoginScreen() {
                 <Ionicons name="call-outline" size={20} color={colors.gray[500]} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Phone Number"
+                  placeholder={t('auth.phonePlaceholder')}
                   placeholderTextColor={colors.gray[400]}
                   value={phone}
                   onChangeText={setPhone}
@@ -208,7 +210,7 @@ export default function LoginScreen() {
                 <Ionicons name="keypad-outline" size={20} color={colors.gray[500]} />
                 <TextInput
                   style={styles.input}
-                  placeholder="4-digit PIN"
+                  placeholder={t('auth.pinPlaceholder')}
                   placeholderTextColor={colors.gray[400]}
                   value={pin}
                   onChangeText={setPin}
@@ -224,56 +226,22 @@ export default function LoginScreen() {
                 disabled={isLoading}
               >
                 <Text style={styles.loginButtonText}>
-                  {isLoading ? 'Verifying...' : 'Login with PIN'}
+                  {isLoading ? t('auth.verifying') : t('auth.loginWithPin')}
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.otpButton} onPress={handleSendOTP}>
-                <Text style={styles.otpButtonText}>Or Login with OTP</Text>
+                <Text style={styles.otpButtonText}>{t('auth.orLoginWithOtp')}</Text>
               </TouchableOpacity>
             </>
           )}
         </View>
 
-        {/* Demo Credentials */}
-        <View style={styles.demoContainer}>
-          <Text style={styles.demoTitle}>Demo Credentials</Text>
 
-          {/* Super Admin Credentials */}
-          <View style={styles.credentialCard}>
-            <View style={styles.credentialHeader}>
-              <Ionicons name="shield-checkmark" size={16} color={colors.error} />
-              <Text style={styles.credentialRoleSuperAdmin}>Super Admin Login</Text>
-            </View>
-            <Text style={styles.demoText}>Username: superadmin | Password: superadmin123</Text>
-            <Text style={styles.demoText}>Phone: 9999999999 | PIN: 0000</Text>
-          </View>
-
-          {/* Admin Credentials */}
-          <View style={styles.credentialCard}>
-            <View style={styles.credentialHeader}>
-              <Ionicons name="shield" size={16} color={colors.accent} />
-              <Text style={styles.credentialRole}>Admin Login</Text>
-            </View>
-            <Text style={styles.demoText}>Username: admin | Password: admin123</Text>
-            <Text style={styles.demoText}>Phone: 8888888888 | PIN: 1234</Text>
-          </View>
-
-          {/* User/Staff Credentials */}
-          <View style={styles.credentialCard}>
-            <View style={styles.credentialHeader}>
-              <Ionicons name="person" size={16} color={colors.secondary} />
-              <Text style={styles.credentialRoleUser}>Staff Login</Text>
-            </View>
-            <Text style={styles.demoText}>Username: user | Password: user123</Text>
-            <Text style={styles.demoText}>Phone: 7777777777 | PIN: 4321</Text>
-          </View>
-        </View>
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Powered by</Text>
-          <Text style={styles.footerBrand}>ShopBill Technologies</Text>
+          <Text style={styles.footerText}>{t('billing.poweredBy')}</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -305,6 +273,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     borderWidth: 3,
     borderColor: colors.accent,
+    overflow: 'hidden',
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
   appName: {
     fontSize: fontSize.display,
@@ -388,51 +362,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.medium,
     color: colors.secondary,
   },
-  demoContainer: {
-    backgroundColor: colors.primaryLight,
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  demoTitle: {
-    fontSize: fontSize.md,
-    fontWeight: fontWeight.bold,
-    color: colors.white,
-    marginBottom: spacing.sm,
-    textAlign: 'center',
-  },
-  credentialCard: {
-    backgroundColor: colors.primary,
-    borderRadius: borderRadius.md,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  credentialHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    marginBottom: spacing.xs,
-  },
-  credentialRoleSuperAdmin: {
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.bold,
-    color: colors.error,
-  },
-  credentialRole: {
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.bold,
-    color: colors.accent,
-  },
-  credentialRoleUser: {
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.bold,
-    color: colors.secondary,
-  },
-  demoText: {
-    fontSize: fontSize.xs,
-    color: colors.gray[400],
-    marginBottom: 2,
-  },
+
   footer: {
     alignItems: 'center',
     marginTop: 'auto',

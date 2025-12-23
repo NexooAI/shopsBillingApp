@@ -1,4 +1,5 @@
-import React from 'react';
+
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,11 +8,16 @@ import {
   TouchableOpacity,
   Alert,
   Switch,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { colors, spacing, borderRadius, fontSize, fontWeight, shadows } from '../../theme';
+import { spacing, borderRadius, fontSize, fontWeight, shadows } from '../../theme';
 import { useApp } from '../../context/AppContext';
+import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
+import { resetAppData } from '../../services/sqliteDatabase';
+import { ColorPalette } from '../../theme/colors';
 
 interface SettingItemProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -20,9 +26,11 @@ interface SettingItemProps {
   onPress?: () => void;
   rightElement?: React.ReactNode;
   danger?: boolean;
+  colors: ColorPalette;
 }
 
-function SettingItem({ icon, title, subtitle, onPress, rightElement, danger }: SettingItemProps) {
+function SettingItem({ icon, title, subtitle, onPress, rightElement, danger, colors }: SettingItemProps) {
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <TouchableOpacity
       style={styles.settingItem}
@@ -45,8 +53,11 @@ function SettingItem({ icon, title, subtitle, onPress, rightElement, danger }: S
 
 export default function SettingsScreen() {
   const navigation = useNavigation();
-  const { state, logout } = useApp();
+  const { state, logout, factoryReset } = useApp();
+  const { colors, toggleTheme, isDark } = useTheme();
+  const { language, toggleLanguage, t } = useLanguage();
   const isAdmin = state.user?.role === 'admin';
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -55,17 +66,46 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const handleResetData = () => {
+  const handleSoftReset = () => {
     Alert.alert(
-      'Reset All Data',
-      'This will delete all products, categories, bills, and users (except master account). This action cannot be undone.',
+      'Reset App Data',
+      'This will delete all business data (Bills, Products, Customers, Categories) but PRESERVE your Admin account. You will remain logged in.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Reset',
+          text: 'Reset Data',
           style: 'destructive',
-          onPress: () => {
-            Alert.alert('Demo', 'Data reset would happen in production');
+          onPress: async () => {
+            try {
+              await resetAppData();
+              Alert.alert('Success', 'Business data has been reset.');
+            } catch (error) {
+              console.error('Reset error:', error);
+              Alert.alert('Error', 'Failed to reset data');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleFactoryReset = () => {
+    Alert.alert(
+      'Factory Reset',
+      'This will permanently delete ALL data including shop settings, products, bills, and users. The app will return to the initial setup screen. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Factory Reset',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await factoryReset();
+              // Navigation will automatically update based on state specific changes (isAuthenticated=false, isSetupComplete=false)
+            } catch (error) {
+              console.error('Reset error:', error);
+              Alert.alert('Error', 'Failed to reset data');
+            }
           },
         },
       ]
@@ -74,6 +114,7 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
       {/* User Profile */}
       <View style={styles.profileSection}>
         <View style={styles.avatarContainer}>
@@ -99,19 +140,22 @@ export default function SettingsScreen() {
             icon="storefront"
             title="Shop Information"
             subtitle="Name, address, contact"
-            onPress={() => Alert.alert('Shop Info', 'Edit shop details here')}
+            onPress={() => navigation.navigate('ShopProfile' as never)}
+            colors={colors}
           />
           <SettingItem
             icon="image"
             title="Logo & Branding"
             subtitle="Bill header logo"
-            onPress={() => Alert.alert('Logo', 'Upload shop logo for bills')}
+            onPress={() => navigation.navigate('ShopProfile' as never)}
+            colors={colors}
           />
           <SettingItem
             icon="print"
             title="Printer Settings"
             subtitle="Wired & Bluetooth printer setup"
             onPress={() => navigation.navigate('PrinterSettings' as never)}
+            colors={colors}
           />
         </View>
       </View>
@@ -126,18 +170,21 @@ export default function SettingsScreen() {
               title="User Management"
               subtitle="Add and manage staff"
               onPress={() => navigation.navigate('UserManagement' as never)}
+              colors={colors}
             />
             <SettingItem
               icon="layers"
               title="Category Management"
               subtitle="Organize product categories"
               onPress={() => navigation.navigate('CategoryManagement' as never)}
+              colors={colors}
             />
             <SettingItem
               icon="pricetag"
               title="Product Management"
               subtitle="Add and edit products"
               onPress={() => navigation.navigate('ProductManagement' as never)}
+              colors={colors}
             />
           </View>
         </View>
@@ -153,12 +200,14 @@ export default function SettingsScreen() {
               title="GST Configuration"
               subtitle="Set default GST rates"
               onPress={() => Alert.alert('GST', 'Configure GST settings')}
+              colors={colors}
             />
             <SettingItem
               icon="document-text"
               title="GSTIN Details"
               subtitle="Business registration"
               onPress={() => Alert.alert('GSTIN', 'Enter your GSTIN number')}
+              colors={colors}
             />
           </View>
         </View>
@@ -166,13 +215,14 @@ export default function SettingsScreen() {
 
       {/* App Settings */}
       <View style={styles.section}>
-        <Text style={styles.sectionHeader}>App Settings</Text>
+        <Text style={styles.sectionHeader}>{t('settings.appSettings')}</Text>
         <View style={styles.sectionContent}>
           <SettingItem
             icon="language"
-            title="Language"
-            subtitle="English"
-            onPress={() => Alert.alert('Language', 'Choose app language')}
+            title={t('settings.language')}
+            subtitle={language === 'en' ? 'English' : 'தமிழ்'}
+            onPress={toggleLanguage}
+            colors={colors}
           />
           <SettingItem
             icon="notifications"
@@ -185,18 +235,20 @@ export default function SettingsScreen() {
                 thumbColor={colors.accent}
               />
             }
+            colors={colors}
           />
           <SettingItem
             icon="moon"
             title="Dark Mode"
             rightElement={
               <Switch
-                value={false}
-                onValueChange={() => Alert.alert('Theme', 'Dark mode coming soon!')}
+                value={isDark}
+                onValueChange={toggleTheme}
                 trackColor={{ false: colors.gray[300], true: colors.accent + '50' }}
-                thumbColor={colors.gray[100]}
+                thumbColor={isDark ? colors.accent : colors.gray[100]}
               />
             }
+            colors={colors}
           />
         </View>
       </View>
@@ -211,18 +263,30 @@ export default function SettingsScreen() {
               title="Server Sync"
               subtitle="Backup data to server"
               onPress={() => navigation.navigate('ServerSync' as never)}
+              colors={colors}
             />
             <SettingItem
               icon="cloud-download"
               title="Export Data"
               subtitle="Download all data as Excel"
               onPress={() => Alert.alert('Export', 'Export functionality')}
+              colors={colors}
+            />
+            <SettingItem
+              icon="refresh-circle"
+              title="Reset App Data"
+              subtitle="Clear data, keep Admin"
+              danger
+              onPress={handleSoftReset}
+              colors={colors}
             />
             <SettingItem
               icon="trash"
-              title="Reset All Data"
+              title="Factory Reset"
+              subtitle="Erase everything"
               danger
-              onPress={handleResetData}
+              onPress={handleFactoryReset}
+              colors={colors}
             />
           </View>
         </View>
@@ -236,16 +300,19 @@ export default function SettingsScreen() {
             icon="information-circle"
             title="App Version"
             subtitle="1.0.0"
+            colors={colors}
           />
           <SettingItem
             icon="help-circle"
             title="Help & Support"
             onPress={() => Alert.alert('Support', 'Contact support@shopbill.com')}
+            colors={colors}
           />
           <SettingItem
             icon="document"
             title="Terms & Privacy"
             onPress={() => Alert.alert('Terms', 'View terms and privacy policy')}
+            colors={colors}
           />
         </View>
       </View>
@@ -261,7 +328,7 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -290,25 +357,24 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   profileRole: {
-    fontSize: fontSize.md,
-    color: colors.gray[300],
-    marginTop: 2,
+    fontSize: fontSize.sm,
+    color: colors.gray[300], // Adjust for dark mode if needed
+    marginTop: 4,
   },
   section: {
     marginBottom: spacing.lg,
+    paddingHorizontal: spacing.md,
   },
   sectionHeader: {
     fontSize: fontSize.sm,
     fontWeight: fontWeight.bold,
     color: colors.text.secondary,
+    marginBottom: spacing.sm,
     textTransform: 'uppercase',
     letterSpacing: 1,
-    marginLeft: spacing.lg,
-    marginBottom: spacing.sm,
   },
   sectionContent: {
-    backgroundColor: colors.white,
-    marginHorizontal: spacing.lg,
+    backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
     overflow: 'hidden',
     ...shadows.small,
@@ -321,30 +387,30 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderLight,
   },
   settingIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primary + '15',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.gray[100],
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: spacing.md,
   },
   dangerIcon: {
-    backgroundColor: colors.error + '15',
+    backgroundColor: colors.errorLight + '20', // opacity
   },
   settingContent: {
     flex: 1,
-    marginLeft: spacing.md,
   },
   settingTitle: {
     fontSize: fontSize.md,
-    fontWeight: fontWeight.medium,
     color: colors.text.primary,
+    fontWeight: fontWeight.medium,
   },
   dangerText: {
     color: colors.error,
   },
   settingSubtitle: {
-    fontSize: fontSize.sm,
+    fontSize: fontSize.xs,
     color: colors.text.secondary,
     marginTop: 2,
   },
@@ -352,20 +418,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.white,
-    marginHorizontal: spacing.lg,
+    marginHorizontal: spacing.md,
     padding: spacing.md,
     borderRadius: borderRadius.lg,
-    gap: spacing.sm,
-    ...shadows.small,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.errorLight,
+    marginBottom: spacing.xl,
   },
   logoutText: {
-    fontSize: fontSize.lg,
+    fontSize: fontSize.md,
     fontWeight: fontWeight.bold,
     color: colors.error,
+    marginLeft: spacing.sm,
   },
   bottomPadding: {
-    height: spacing.xxl,
+    height: 40,
   },
 });
 

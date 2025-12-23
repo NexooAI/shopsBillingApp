@@ -107,7 +107,7 @@ export default function ProductManagementScreen() {
 
   const handleEditProduct = (product: Product) => {
     // Navigate to edit screen (reusing AddProduct screen)
-    navigation.navigate('AddProduct', { categoryId: product.categoryId });
+    navigation.navigate('AddProduct', { categoryId: product.categoryId, product });
   };
 
   return (
