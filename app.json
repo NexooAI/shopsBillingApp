@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "EasyBills",
-    "slug": "easybills",
+    "slug": "mnv-billings",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/playstore-icon.png",
